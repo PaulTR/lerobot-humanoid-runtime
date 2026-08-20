@@ -6,14 +6,15 @@ from __future__ import annotations
 Interactive micro-motion tester to safely verify joint sign conventions and movement directions
 one joint at a time before deploying dynamic control policies.
 
-Applies soft test gains (default Kp=15.0, Kd=1.0) and small amplitude offsets (1 to 5 degrees).
-Streams live feedback (Target vs Calibrated Angle vs Raw Angle vs Torque vs E-STOP state).
+Features:
+  - Quiet, smooth damping (default Kp=25.0, Kd=0.2) to prevent derivative chatter/humming.
+  - Commands only the selected motor while keeping unselected motors quiet and relaxed.
+  - Preserves current resting pose for unselected joints so displaced joints don't reject commands.
+  - Streams live Target, Calibrated Angle, Raw Angle, Torque, and E-STOP telemetry in real time.
 
 Usage:
     # On physical robot (with can0 & can1 up):
     uv run python tools/joint_nudge_tester.py
-    # or with higher stiffness gain if needed:
-    uv run python tools/joint_nudge_tester.py --kp 25.0
 
     # Dry run with mock CAN buses:
     python tools/joint_nudge_tester.py --use-mock-bus
@@ -47,8 +48,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--channel-can0", default="can0", help="CAN interface for left leg (default: can0)")
     parser.add_argument("--channel-can1", default="can1", help="CAN interface for right leg (default: can1)")
     parser.add_argument("--use-mock-bus", action="store_true", help="Use mock CAN buses for testing")
-    parser.add_argument("--kp", type=float, default=15.0, help="Kp stiffness gain for testing (default: 15.0)")
-    parser.add_argument("--kd", type=float, default=1.0, help="Kd damping gain for testing (default: 1.0)")
+    parser.add_argument("--kp", type=float, default=25.0, help="Kp stiffness gain for active joint (default: 25.0)")
+    parser.add_argument("--kd", type=float, default=0.2, help="Kd damping gain for active joint (default: 0.2)")
     return parser.parse_args()
 
 
@@ -82,6 +83,9 @@ def init_controller(args: argparse.Namespace):
             control_hz=100.0,
         )
 
+    # Allow command deltas during interactive testing
+    robot.set_max_command_delta(80.0)
+
     # Start background control loop in safe state_only mode initially
     robot.start(mode="state_only", auto_enable=False)
     time.sleep(0.1)
@@ -101,60 +105,80 @@ def print_menu():
     print("=" * 65)
     for mid in sorted(MOTORS.keys()):
         m = MOTORS[mid]
-        leg = "Left " if mid <= 6 else "Right"
+        leg = "Right" if mid <= 6 else "Left "
         print(f"  [{mid:>2}] {leg} {m.name:<15} (Bus: {'can0' if mid <= 6 else 'can1'})")
     print("=" * 65)
-    print("Commands: Select Motor ID (1-12), 'zero' for zero pose, 'gains' to change Kp, 'q' to exit")
+    print("Commands: Select Motor ID (1-12), 'zero' for zero pose, 'gains' to change Kp/Kd, 'q' to exit")
     print("=" * 65)
 
 
-def nudge_motor(robot, motor_id: int, nudge_deg: float, args: argparse.Namespace) -> None:
+def nudge_motor(robot, motor_id: int, nudge_deg: float, args: argparse.Namespace, *, relative: bool = False) -> None:
     mname = MOTORS[motor_id].name
-    print(f"\n[NUDGE] Commanding Motor ID {motor_id} ({mname}) by {nudge_deg:+.1f}° (Kp={args.kp}, Kd={args.kd})...")
-    
-    # Set gains on the target motor (and partner if coupled ankle)
-    robot.set_joint_gains(motor_id, kp=args.kp, kd=args.kd)
-    if motor_id in (5, 6):
-        robot.set_joint_gains(5, kp=args.kp, kd=args.kd)
-        robot.set_joint_gains(6, kp=args.kp, kd=args.kd)
-    elif motor_id in (11, 12):
-        robot.set_joint_gains(11, kp=args.kp, kd=args.kd)
-        robot.set_joint_gains(12, kp=args.kp, kd=args.kd)
-
-    # Clear any previous estop and switch to control mode
-    robot.clear_estop()
-    robot.set_mode("control")
-    robot.enable_all()
-
-    # Zero dicts
-    zero_left = {"hipz": 0.0, "hipx": 0.0, "hipy": 0.0, "knee": 0.0, "ankle_pitch": 0.0, "ankle_roll": 0.0}
-    zero_right = {"hipz": 0.0, "hipx": 0.0, "hipy": 0.0, "knee": 0.0, "ankle_pitch": 0.0, "ankle_roll": 0.0}
+    side = "right" if motor_id <= 6 else "left"
 
     # Map motor ID to joint key
     joint_map = {
-        1: ("left", "hipz"),
-        2: ("left", "hipx"),
-        3: ("left", "hipy"),
-        4: ("left", "knee"),
-        5: ("left", "ankle_pitch"),
-        6: ("left", "ankle_roll"),
-        7: ("right", "hipz"),
-        8: ("right", "hipx"),
-        9: ("right", "hipy"),
-        10: ("right", "knee"),
-        11: ("right", "ankle_pitch"),
-        12: ("right", "ankle_roll"),
+        1: ("right", "hipz"),
+        2: ("right", "hipx"),
+        3: ("right", "hipy"),
+        4: ("right", "knee"),
+        5: ("right", "ankle_pitch"),
+        6: ("right", "ankle_roll"),
+        7: ("left", "hipz"),
+        8: ("left", "hipx"),
+        9: ("left", "hipy"),
+        10: ("left", "knee"),
+        11: ("left", "ankle_pitch"),
+        12: ("left", "ankle_roll"),
     }
-    side, joint_key = joint_map[motor_id]
-    target_dict = zero_left if side == "left" else zero_right
-    target_dict[joint_key] = float(nudge_deg)
+    target_side, joint_key = joint_map[motor_id]
 
-    robot.set_action(left=zero_left, right=zero_right)
+    # Get current live joint positions
+    snap = robot.get_combined_state_snapshot()
+    cur_raw = {mid: snap.get("motors", {}).get(mid, {}).get("raw_position_deg", 0.0) for mid in MOTOR_IDS}
+    q_cur = robot.motor_state_to_joint_state(cur_raw, output_radians=False, nq=12)
 
-    # Stream live feedback for 1.5 seconds so user can see angles & torque
+    # In model joint array: Left is 0..5, Right is 6..11
+    joint_idx_map = {
+        7: 0, 8: 1, 9: 2, 10: 3, 11: 4, 12: 5, # Left
+        1: 6, 2: 7, 3: 8, 4: 9, 5: 10, 6: 11,   # Right
+    }
+    cur_joint_val = float(q_cur[joint_idx_map[motor_id]])
+    target_val = (cur_joint_val + nudge_deg) if relative else nudge_deg
+
+    print(f"\n[NUDGE] Commanding {mname} (m{motor_id}) -> {target_val:+.1f}° (Kp={args.kp}, Kd={args.kd})...")
+
+    # Set soft quiet holding gains on unselected motors, and active gains on test motor
+    for mid in MOTOR_IDS:
+        if mid == motor_id or (motor_id in (5, 6) and mid in (5, 6)) or (motor_id in (11, 12) and mid in (11, 12)):
+            robot.set_joint_gains(mid, kp=args.kp, kd=args.kd)
+        else:
+            robot.set_joint_gains(mid, kp=0.0, kd=0.05)  # Quiet relaxed state
+
+    # Build action preserving current resting angles for other joints
+    target_left = {
+        "hipz": float(q_cur[0]), "hipx": float(q_cur[1]), "hipy": float(q_cur[2]),
+        "knee": float(q_cur[3]), "ankle_pitch": float(q_cur[4]), "ankle_roll": float(q_cur[5])
+    }
+    target_right = {
+        "hipz": float(q_cur[6]), "hipx": float(q_cur[7]), "hipy": float(q_cur[8]),
+        "knee": float(q_cur[9]), "ankle_pitch": float(q_cur[10]), "ankle_roll": float(q_cur[11])
+    }
+
+    if target_side == "left":
+        target_left[joint_key] = float(target_val)
+    else:
+        target_right[joint_key] = float(target_val)
+
+    # Clear estop, switch to control mode, and enable
+    robot.clear_estop()
+    robot.set_mode("control")
+    robot.enable_all()
+    robot.set_action(left=target_left, right=target_right)
+
+    # Stream live feedback for 2.0 seconds
     print("  Streaming live feedback:")
-    t_end = time.time() + 1.5
-    last_meas = 0.0
+    t_end = time.time() + 2.0
     while time.time() < t_end:
         snap = robot.get_combined_state_snapshot()
         st = snap.get("motors", {}).get(motor_id, {})
@@ -163,11 +187,10 @@ def nudge_motor(robot, motor_id: int, nudge_deg: float, args: argparse.Namespace
         tau = st.get("torque_nm", 0.0)
         estop = snap.get("estop", False)
         estop_reason = snap.get("estop_reason", "")
-        last_meas = meas_deg
 
         status_txt = "RUNNING" if not estop else f"E-STOP: {estop_reason}"
         sys.stdout.write(
-            f"\r  --> Target: {nudge_deg:+.1f}° | Calibrated: {meas_deg:+6.2f}° (Raw: {raw_deg:+6.2f}°) | Torque: {tau:+5.2f}Nm | [{status_txt}]"
+            f"\r  --> Target: {target_val:+.1f}° | Calibrated: {meas_deg:+6.2f}° (Raw: {raw_deg:+6.2f}°) | Torque: {tau:+5.2f}Nm | [{status_txt}]"
         )
         sys.stdout.flush()
         time.sleep(0.05)
@@ -206,7 +229,13 @@ def main() -> int:
             if choice == "zero":
                 print("[ACTION] Returning all joints to 0.0° zero pose...")
                 zero = {"hipz": 0.0, "hipx": 0.0, "hipy": 0.0, "knee": 0.0, "ankle_pitch": 0.0, "ankle_roll": 0.0}
+                robot.clear_estop()
+                robot.set_mode("control")
+                robot.enable_all()
+                for mid in MOTOR_IDS:
+                    robot.set_joint_gains(mid, kp=args.kp, kd=args.kd)
                 robot.set_action(left=zero, right=zero)
+                time.sleep(1.0)
                 continue
 
             try:
@@ -250,9 +279,9 @@ def main() -> int:
                 verified_joints[mid] = "INVERTED/FAILED"
                 print(f"[WARNING] {mname} direction mismatch flagged! Check sign table in root_constant.py.")
 
-            input("\nPress [ENTER] to return motor to zero pose and continue...")
-            zero = {"hipz": 0.0, "hipx": 0.0, "hipy": 0.0, "knee": 0.0, "ankle_pitch": 0.0, "ankle_roll": 0.0}
-            robot.set_action(left=zero, right=zero)
+            input("\nPress [ENTER] to relax motors and continue...")
+            robot.set_mode("state_only")
+            robot.disable_all()
 
         print("\n=" * 65)
         print("                MOTION VERIFICATION SUMMARY                ")

@@ -42,23 +42,23 @@ JOINT_ORDER = [
 # not depend on repository-level `robots.*` constants packages.
 HUMANOID_MOTOR_IDS: tuple[int, ...] = tuple(range(1, 13))
 HUMANOID_MOTORS: dict[int, str] = {
-    1: "left_hipz",
-    2: "left_hipx",
-    3: "left_hipy",
-    4: "left_knee",
-    5: "left_ankle1",
-    6: "left_ankle2",
-    7: "right_hipz",
-    8: "right_hipx",
-    9: "right_hipy",
-    10: "right_knee",
-    11: "right_ankle1",
-    12: "right_ankle2",
+    1: "right_hipz",
+    2: "right_hipx",
+    3: "right_hipy",
+    4: "right_knee",
+    5: "right_ankle1",
+    6: "right_ankle2",
+    7: "left_hipz",
+    8: "left_hipx",
+    9: "left_hipy",
+    10: "left_knee",
+    11: "left_ankle1",
+    12: "left_ankle2",
 }
 
-# Current routing: right IDs on can0, left IDs on can1.
-HUMANOID_CAN1_MOTOR_IDS: tuple[int, ...] = (7, 8, 9, 10, 11, 12)
+# Routing: right IDs on can0, left IDs on can1.
 HUMANOID_CAN0_MOTOR_IDS: tuple[int, ...] = (1, 2, 3, 4, 5, 6)
+HUMANOID_CAN1_MOTOR_IDS: tuple[int, ...] = (7, 8, 9, 10, 11, 12)
 
 HUMANOID_MOTOR_RECV_ID_BY_ID: dict[int, int] = {mid: mid for mid in HUMANOID_MOTOR_IDS}
 HUMANOID_MOTOR_SIGN: dict[int, float] = {
@@ -104,12 +104,12 @@ HUMANOID_MOTOR_TYPE_BY_ID: dict[int, str] = {
     12: "o5",
 }
 HUMANOID_ANKLE_COUPLING_CALIBRATION_LEFT: dict[str, Any] = {
-    "motors": (5, 6),
+    "motors": (11, 12),
     "pitch": {"sign": -1.0, "offset_deg": 0.0},
     "roll": {"sign": +1.0, "offset_deg": 0.0},
 }
 HUMANOID_ANKLE_COUPLING_CALIBRATION_RIGHT: dict[str, Any] = {
-    "motors": (11, 12),
+    "motors": (5, 6),
     "pitch": {"sign": -1.0, "offset_deg": 0.0},
     "roll": {"sign": +1.0, "offset_deg": 0.0},
 }
@@ -136,14 +136,14 @@ class LeRobotHumanoid(Robot):
         self._ankle_right_cfg = HUMANOID_ANKLE_COUPLING_CALIBRATION_RIGHT
 
         self._joint_to_motor_direct = {
-            "left_hipz": 1,
-            "left_hipx": 2,
-            "left_hipy": 3,
-            "left_knee": 4,
-            "right_hipz": 7,
-            "right_hipx": 8,
-            "right_hipy": 9,
-            "right_knee": 10,
+            "right_hipz": 1,
+            "right_hipx": 2,
+            "right_hipy": 3,
+            "right_knee": 4,
+            "left_hipz": 7,
+            "left_hipx": 8,
+            "left_hipy": 9,
+            "left_knee": 10,
         }
 
         self._bus_can0 = RobstrideMotorsBus(

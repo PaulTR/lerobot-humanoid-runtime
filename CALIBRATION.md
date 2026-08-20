@@ -98,11 +98,11 @@ i2cdetect -y 1
 
 ### Joint-to-Motor IDs for zeroing
 
-- `hipz`: left `1`, right `7`
-- `hipx`: left `2`, right `8`
-- `hipy`: left `3`, right `9`
-- `knee`: left `4`, right `10`
-- `ankle`: left `5,6`, right `11,12`
+- `hipz`: right `1` (can0), left `7` (can1)
+- `hipx`: right `2` (can0), left `8` (can1)
+- `hipy`: right `3` (can0), left `9` (can1)
+- `knee`: right `4` (can0), left `10` (can1)
+- `ankle`: right `5,6` (can0), left `11,12` (can1)
 
 ### Reference pictures
 

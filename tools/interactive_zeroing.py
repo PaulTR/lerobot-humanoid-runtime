@@ -54,12 +54,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--channel-can0",
         default="can0",
-        help="CAN interface for left leg / motors 1-6 (default: can0)",
+        help="CAN interface for right leg / motors 1-6 (default: can0)",
     )
     parser.add_argument(
         "--channel-can1",
         default="can1",
-        help="CAN interface for right leg / motors 7-12 (default: can1)",
+        help="CAN interface for left leg / motors 7-12 (default: can1)",
     )
     parser.add_argument(
         "--use-mock-bus",
@@ -72,123 +72,123 @@ def parse_args() -> argparse.Namespace:
 def get_joint_sequence() -> list[dict]:
     """Define the zeroing sequence step by step.
 
-    Covers IDs 1-6 (Leg 1 / Left leg on can0) and IDs 7-12 (Leg 2 / Right leg on can1).
-    For the feet/ankles, motors 5 & 6 (Left) and 11 & 12 (Right) are both mounted in the shin/tibia
+    Covers IDs 1-6 (Leg 1 / Right leg on can0) and IDs 7-12 (Leg 2 / Left leg on can1).
+    For the feet/ankles, motors 5 & 6 (Right) and 11 & 12 (Left) are both mounted in the shin/tibia
     and are zeroed together using the printed ankle calibration tool attached between the tibia and foot.
     """
     return [
-        # --- Leg 1 / Left (CAN0: IDs 1..6) ---
+        # --- Leg 1 / Right (CAN0: IDs 1..6) ---
         {
             "step": 1,
-            "side": "Leg 1 (CAN0 / Left)",
+            "side": "Leg 1 (CAN0 / Right)",
             "joint_name": "Hip Yaw (Z)",
             "motor_ids": [1],
             "instruction": (
-                "Physically align Left Hip Z (Motor 1) to its zero position:\n"
+                "Physically align Right Hip Z (Motor 1) to its zero position:\n"
                 "  • Rotate pelvis block so it points straight forward parallel to forward axis.\n"
                 "  • Reference images: docs/calibration_assets/zero_refs/hipz_zeros1.jpg & hipz_zero2.jpg"
             ),
         },
         {
             "step": 2,
-            "side": "Leg 1 (CAN0 / Left)",
+            "side": "Leg 1 (CAN0 / Right)",
             "joint_name": "Hip Roll (X)",
             "motor_ids": [2],
             "instruction": (
-                "Physically align Left Hip X (Motor 2) to its zero position:\n"
+                "Physically align Right Hip X (Motor 2) to its zero position:\n"
                 "  • Align leg flush vertically with torso frame (0 deg abduction/adduction).\n"
                 "  • Reference image: docs/calibration_assets/zero_refs/hipx_zero.jpg"
             ),
         },
         {
             "step": 3,
-            "side": "Leg 1 (CAN0 / Left)",
+            "side": "Leg 1 (CAN0 / Right)",
             "joint_name": "Hip Pitch (Y)",
             "motor_ids": [3],
             "instruction": (
-                "Physically align Left Hip Y (Motor 3) to its zero position:\n"
+                "Physically align Right Hip Y (Motor 3) to its zero position:\n"
                 "  • Align thigh member pointing straight down vertically.\n"
                 "  • Reference image: docs/calibration_assets/zero_refs/hipy_zero.jpg"
             ),
         },
         {
             "step": 4,
-            "side": "Leg 1 (CAN0 / Left)",
+            "side": "Leg 1 (CAN0 / Right)",
             "joint_name": "Knee",
             "motor_ids": [4],
             "instruction": (
-                "Physically align Left Knee (Motor 4) to its zero position:\n"
+                "Physically align Right Knee (Motor 4) to its zero position:\n"
                 "  • Fully extend shin straight down with the thigh (0 deg knee flexion).\n"
                 "  • Reference image: docs/calibration_assets/zero_refs/knee_zero.jpg"
             ),
         },
         {
             "step": 5,
-            "side": "Leg 1 (CAN0 / Left)",
+            "side": "Leg 1 (CAN0 / Right)",
             "joint_name": "Tibia Motors 5 & 6 / Ankle Linkage",
             "motor_ids": [5, 6],
             "instruction": (
-                "Physically align Left Ankle/Foot using the Printed Alignment Tool:\n"
-                "  • Motors 5 & 6 are both mounted inside the Left Tibia (shin) driving the parallel rods.\n"
+                "Physically align Right Ankle/Foot using the Printed Alignment Tool:\n"
+                "  • Motors 5 & 6 are both mounted inside the Right Tibia (shin) driving the parallel rods.\n"
                 "  • Mount the 3D-printed tool (docs/calibration_assets/zero_refs/ankle_calibration_tool.stl)\n"
                 "    between the tibia (shin) and the foot to lock the ankle at 90 deg.\n"
                 "  • Both Tibia Motors 5 and 6 will be zeroed together in this step.\n"
                 "  • Reference image: docs/calibration_assets/zero_refs/ankle_zero2.jpg"
             ),
         },
-        # --- Leg 2 / Right (CAN1: IDs 7..12) ---
+        # --- Leg 2 / Left (CAN1: IDs 7..12) ---
         {
             "step": 6,
-            "side": "Leg 2 (CAN1 / Right)",
+            "side": "Leg 2 (CAN1 / Left)",
             "joint_name": "Hip Yaw (Z)",
             "motor_ids": [7],
             "instruction": (
-                "Physically align Right Hip Z (Motor 7) to its zero position:\n"
+                "Physically align Left Hip Z (Motor 7) to its zero position:\n"
                 "  • Rotate pelvis block so it points straight forward parallel to forward axis.\n"
                 "  • Reference images: docs/calibration_assets/zero_refs/hipz_zeros1.jpg & hipz_zero2.jpg"
             ),
         },
         {
             "step": 7,
-            "side": "Leg 2 (CAN1 / Right)",
+            "side": "Leg 2 (CAN1 / Left)",
             "joint_name": "Hip Roll (X)",
             "motor_ids": [8],
             "instruction": (
-                "Physically align Right Hip X (Motor 8) to its zero position:\n"
+                "Physically align Left Hip X (Motor 8) to its zero position:\n"
                 "  • Align leg flush vertically with torso frame (0 deg abduction/adduction).\n"
                 "  • Reference image: docs/calibration_assets/zero_refs/hipx_zero.jpg"
             ),
         },
         {
             "step": 8,
-            "side": "Leg 2 (CAN1 / Right)",
+            "side": "Leg 2 (CAN1 / Left)",
             "joint_name": "Hip Pitch (Y)",
             "motor_ids": [9],
             "instruction": (
-                "Physically align Right Hip Y (Motor 9) to its zero position:\n"
+                "Physically align Left Hip Y (Motor 9) to its zero position:\n"
                 "  • Align thigh member pointing straight down vertically.\n"
                 "  • Reference image: docs/calibration_assets/zero_refs/hipy_zero.jpg"
             ),
         },
         {
             "step": 9,
-            "side": "Leg 2 (CAN1 / Right)",
+            "side": "Leg 2 (CAN1 / Left)",
             "joint_name": "Knee",
             "motor_ids": [10],
             "instruction": (
-                "Physically align Right Knee (Motor 10) to its zero position:\n"
+                "Physically align Left Knee (Motor 10) to its zero position:\n"
                 "  • Fully extend shin straight down with the thigh (0 deg knee flexion).\n"
                 "  • Reference image: docs/calibration_assets/zero_refs/knee_zero.jpg"
             ),
         },
         {
             "step": 10,
-            "side": "Leg 2 (CAN1 / Right)",
+            "side": "Leg 2 (CAN1 / Left)",
             "joint_name": "Tibia Motors 11 & 12 / Ankle Linkage",
             "motor_ids": [11, 12],
             "instruction": (
-                "Physically align Right Ankle/Foot using the Printed Alignment Tool:\n"
-                "  • Motors 11 & 12 are both mounted inside the Right Tibia (shin) driving the parallel rods.\n"
+                "Physically align Left Ankle/Foot using the Printed Alignment Tool:\n"
+                "  • Motors 11 & 12 are both mounted inside the Left Tibia (shin) driving the parallel rods.\n"
                 "  • Mount the 3D-printed tool (docs/calibration_assets/zero_refs/ankle_calibration_tool.stl)\n"
                 "    between the tibia (shin) and the foot to lock the ankle at 90 deg.\n"
                 "  • Both Tibia Motors 11 and 12 will be zeroed together in this step.\n"

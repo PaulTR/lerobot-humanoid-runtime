@@ -201,7 +201,7 @@ def run_scanner(args: argparse.Namespace) -> int:
 
     scan_ids = list(range(0, 128)) if args.full_scan else list(range(1, 13))
     print(f"Scan Mode : {'Full Range (0..127)' if args.full_scan else 'Standard Humanoid (1..12)'}")
-    print(f"Interfaces: Left Leg = {args.channel_can0} | Right Leg = {args.channel_can1}")
+    print(f"Interfaces: Right Leg = {args.channel_can0} | Left Leg = {args.channel_can1}")
     if args.use_mock_bus:
         print("Backend   : MOCK (Simulation)")
     print("=" * 76)
@@ -228,11 +228,11 @@ def run_scanner(args: argparse.Namespace) -> int:
                 return 1
 
     # Format Results Table
-    print("CAN0 (Left Leg - Expected IDs 1..6):")
+    print("CAN0 (Right Leg - Expected IDs 1..6):")
     print("-" * 76)
     print(f"{'ID':>3} | {'Joint Name':<16} | {'Model':<5} | {'Status':<10} | {'Raw Pos':>9} | {'Temp':>6}")
     print("-" * 76)
-    missing_left = []
+    missing_right = []
     for mid in CAN0_MOTOR_IDS:
         m = MOTORS.get(mid)
         jname = m.name if m else f"ID {mid}"
@@ -246,7 +246,7 @@ def run_scanner(args: argparse.Namespace) -> int:
             status = "✗ MISSING"
             pos_txt = "---"
             temp_txt = "---"
-            missing_left.append(mid)
+            missing_right.append(mid)
         print(f"{mid:>3} | {jname:<16} | {model:<5} | {status:<10} | {pos_txt:>9} | {temp_txt:>6}")
 
     # Check for unexpected IDs on can0
@@ -256,11 +256,11 @@ def run_scanner(args: argparse.Namespace) -> int:
         print(f"  [!] Unexpected motors found on {args.channel_can0}: {extra_can0}")
 
     print()
-    print("CAN1 (Right Leg - Expected IDs 7..12):")
+    print("CAN1 (Left Leg - Expected IDs 7..12):")
     print("-" * 76)
     print(f"{'ID':>3} | {'Joint Name':<16} | {'Model':<5} | {'Status':<10} | {'Raw Pos':>9} | {'Temp':>6}")
     print("-" * 76)
-    missing_right = []
+    missing_left = []
     for mid in CAN1_MOTOR_IDS:
         m = MOTORS.get(mid)
         jname = m.name if m else f"ID {mid}"
@@ -274,7 +274,7 @@ def run_scanner(args: argparse.Namespace) -> int:
             status = "✗ MISSING"
             pos_txt = "---"
             temp_txt = "---"
-            missing_right.append(mid)
+            missing_left.append(mid)
         print(f"{mid:>3} | {jname:<16} | {model:<5} | {status:<10} | {pos_txt:>9} | {temp_txt:>6}")
 
     # Check for unexpected IDs on can1
@@ -284,16 +284,16 @@ def run_scanner(args: argparse.Namespace) -> int:
         print(f"  [!] Unexpected motors found on {args.channel_can1}: {extra_can1}")
 
     # Summary
-    total_found = (6 - len(missing_left)) + (6 - len(missing_right))
+    total_found = (6 - len(missing_right)) + (6 - len(missing_left))
     print("=" * 76)
     print(f"SCAN SUMMARY: {total_found} / 12 Expected Motors Responding")
-    if not missing_left and not missing_right:
+    if not missing_right and not missing_left:
         print(">> STATUS: ALL 12 MOTORS READY ON CORRECT CAN BUSES! <<")
     else:
-        if missing_left:
-            print(f"  • Missing on {args.channel_can0} (Left) : IDs {missing_left}")
         if missing_right:
-            print(f"  • Missing on {args.channel_can1} (Right): IDs {missing_right}")
+            print(f"  • Missing on {args.channel_can0} (Right): IDs {missing_right}")
+        if missing_left:
+            print(f"  • Missing on {args.channel_can1} (Left) : IDs {missing_left}")
         print("\nTroubleshooting tips:")
         print("  1. Verify bus interfaces: `ip link show can0` & `ip link show can1`")
         print("  2. Check motor 48V power and CAN bus termination resistors (120 Ohm).")
