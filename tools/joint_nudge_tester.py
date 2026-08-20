@@ -6,14 +6,17 @@ from __future__ import annotations
 Interactive micro-motion tester to safely verify joint sign conventions and movement directions
 one joint at a time before deploying dynamic control policies.
 
-Applies soft low gains (Kp=5.0, Kd=0.5) and small amplitude offsets (1 to 5 degrees).
+Applies soft test gains (default Kp=15.0, Kd=1.0) and small amplitude offsets (1 to 5 degrees).
+Streams live feedback (Target vs Calibrated Angle vs Raw Angle vs Torque vs E-STOP state).
 
 Usage:
-    # On physical robot:
+    # On physical robot (with can0 & can1 up):
     uv run python tools/joint_nudge_tester.py
+    # or with higher stiffness gain if needed:
+    uv run python tools/joint_nudge_tester.py --kp 25.0
 
     # Dry run with mock CAN buses:
-    uv run python tools/joint_nudge_tester.py --use-mock-bus
+    python tools/joint_nudge_tester.py --use-mock-bus
 """
 
 import argparse
@@ -44,8 +47,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--channel-can0", default="can0", help="CAN interface for left leg (default: can0)")
     parser.add_argument("--channel-can1", default="can1", help="CAN interface for right leg (default: can1)")
     parser.add_argument("--use-mock-bus", action="store_true", help="Use mock CAN buses for testing")
-    parser.add_argument("--kp", type=float, default=5.0, help="Low Kp stiffness gain for testing (default: 5.0)")
-    parser.add_argument("--kd", type=float, default=0.5, help="Low Kd damping gain for testing (default: 0.5)")
+    parser.add_argument("--kp", type=float, default=15.0, help="Kp stiffness gain for testing (default: 15.0)")
+    parser.add_argument("--kd", type=float, default=1.0, help="Kd damping gain for testing (default: 1.0)")
     return parser.parse_args()
 
 
@@ -71,12 +74,25 @@ def init_controller(args: argparse.Namespace):
 
         bus_can0 = RobstrideMockBus(motors=_build_motors(CAN0_MOTOR_IDS))
         bus_can1 = RobstrideMockBus(motors=_build_motors(CAN1_MOTOR_IDS))
-        return BipedalRobotController(bus_can0=bus_can0, bus_can1=bus_can1)
+        robot = BipedalRobotController(bus_can0=bus_can0, bus_can1=bus_can1, control_hz=100.0)
+    else:
+        robot = BipedalRobotController(
+            channel_can0=args.channel_can0,
+            channel_can1=args.channel_can1,
+            control_hz=100.0,
+        )
 
-    return BipedalRobotController(
-        channel_can0=args.channel_can0,
-        channel_can1=args.channel_can1,
-    )
+    # Start background control loop in safe state_only mode initially
+    robot.start(mode="state_only", auto_enable=False)
+    time.sleep(0.1)
+    missing = robot.request_state_once()
+    if missing:
+        print(f"\n[WARNING] Some motors did not respond on CAN: {missing}")
+        print("  Make sure CAN buses are up and all motors are powered.\n")
+    else:
+        print("[INIT] All 12 motors responding on CAN.")
+
+    return robot
 
 
 def print_menu():
@@ -88,43 +104,74 @@ def print_menu():
         leg = "Left " if mid <= 6 else "Right"
         print(f"  [{mid:>2}] {leg} {m.name:<15} (Bus: {'can0' if mid <= 6 else 'can1'})")
     print("=" * 65)
-    print("Commands: Select Motor ID (1-12), 'zero' for zero pose, 'q' to exit")
+    print("Commands: Select Motor ID (1-12), 'zero' for zero pose, 'gains' to change Kp, 'q' to exit")
     print("=" * 65)
 
 
 def nudge_motor(robot, motor_id: int, nudge_deg: float, args: argparse.Namespace) -> None:
-    print(f"\n[NUDGE] Commanding Motor ID {motor_id} ({MOTORS[motor_id].name}) by {nudge_deg:+.1f}° ...")
+    mname = MOTORS[motor_id].name
+    print(f"\n[NUDGE] Commanding Motor ID {motor_id} ({mname}) by {nudge_deg:+.1f}° (Kp={args.kp}, Kd={args.kd})...")
     
-    # Set low gains for safety
+    # Set gains on the target motor (and partner if coupled ankle)
     robot.set_joint_gains(motor_id, kp=args.kp, kd=args.kd)
+    if motor_id in (5, 6):
+        robot.set_joint_gains(5, kp=args.kp, kd=args.kd)
+        robot.set_joint_gains(6, kp=args.kp, kd=args.kd)
+    elif motor_id in (11, 12):
+        robot.set_joint_gains(11, kp=args.kp, kd=args.kd)
+        robot.set_joint_gains(12, kp=args.kp, kd=args.kd)
+
+    # Clear any previous estop and switch to control mode
+    robot.clear_estop()
     robot.set_mode("control")
     robot.enable_all()
 
-    # Get current zero dicts
+    # Zero dicts
     zero_left = {"hipz": 0.0, "hipx": 0.0, "hipy": 0.0, "knee": 0.0, "ankle_pitch": 0.0, "ankle_roll": 0.0}
     zero_right = {"hipz": 0.0, "hipx": 0.0, "hipy": 0.0, "knee": 0.0, "ankle_pitch": 0.0, "ankle_roll": 0.0}
 
     # Map motor ID to joint key
-    mname = MOTORS[motor_id].name
-    side = "left" if motor_id <= 6 else "right"
-    joint_key = mname.replace("left_", "").replace("right_", "")
-
-    if "ankle" in joint_key:
-        joint_key = "ankle_pitch"
-
+    joint_map = {
+        1: ("left", "hipz"),
+        2: ("left", "hipx"),
+        3: ("left", "hipy"),
+        4: ("left", "knee"),
+        5: ("left", "ankle_pitch"),
+        6: ("left", "ankle_roll"),
+        7: ("right", "hipz"),
+        8: ("right", "hipx"),
+        9: ("right", "hipy"),
+        10: ("right", "knee"),
+        11: ("right", "ankle_pitch"),
+        12: ("right", "ankle_roll"),
+    }
+    side, joint_key = joint_map[motor_id]
     target_dict = zero_left if side == "left" else zero_right
     target_dict[joint_key] = float(nudge_deg)
 
-    if side == "left":
-        robot.set_action(left=target_dict, right=zero_right)
-    else:
-        robot.set_action(left=zero_left, right=target_dict)
+    robot.set_action(left=zero_left, right=zero_right)
 
-    time.sleep(0.5)
-    snap = robot.get_combined_state_snapshot()
-    st = snap.get("motors", {}).get(motor_id, {})
-    meas_deg = st.get("calibrated_position_deg", 0.0)
-    print(f"  --> Target: {nudge_deg:+.1f}° | Measured Calibrated: {meas_deg:+.2f}°")
+    # Stream live feedback for 1.5 seconds so user can see angles & torque
+    print("  Streaming live feedback:")
+    t_end = time.time() + 1.5
+    last_meas = 0.0
+    while time.time() < t_end:
+        snap = robot.get_combined_state_snapshot()
+        st = snap.get("motors", {}).get(motor_id, {})
+        meas_deg = st.get("calibrated_position_deg", 0.0)
+        raw_deg = st.get("raw_position_deg", 0.0)
+        tau = st.get("torque_nm", 0.0)
+        estop = snap.get("estop", False)
+        estop_reason = snap.get("estop_reason", "")
+        last_meas = meas_deg
+
+        status_txt = "RUNNING" if not estop else f"E-STOP: {estop_reason}"
+        sys.stdout.write(
+            f"\r  --> Target: {nudge_deg:+.1f}° | Calibrated: {meas_deg:+6.2f}° (Raw: {raw_deg:+6.2f}°) | Torque: {tau:+5.2f}Nm | [{status_txt}]"
+        )
+        sys.stdout.flush()
+        time.sleep(0.05)
+    print()
 
 
 def main() -> int:
@@ -140,10 +187,21 @@ def main() -> int:
     try:
         while True:
             print_menu()
-            choice = input("Select Motor ID or command: ").strip().lower()
+            choice = input(f"Select Motor ID or command [Current Kp={args.kp}, Kd={args.kd}]: ").strip().lower()
 
             if choice in ("q", "quit", "exit"):
                 break
+
+            if choice == "gains":
+                try:
+                    new_kp = float(input(f"Enter new Kp gain (current={args.kp}): "))
+                    new_kd = float(input(f"Enter new Kd gain (current={args.kd}): "))
+                    args.kp = new_kp
+                    args.kd = new_kd
+                    print(f"[GAINS] Updated test gains to Kp={args.kp}, Kd={args.kd}")
+                except ValueError:
+                    print("[ERROR] Invalid number.")
+                continue
 
             if choice == "zero":
                 print("[ACTION] Returning all joints to 0.0° zero pose...")
@@ -181,8 +239,10 @@ def main() -> int:
                 except ValueError:
                     print("[ERROR] Invalid float.")
                     continue
+            elif action == "b":
+                continue
 
-            confirm = input(f"Did {mname} move in expected physical direction? (y/n) [y]: ").strip().lower()
+            confirm = input(f"\nDid {mname} move in expected physical direction? (y/n) [y]: ").strip().lower()
             if confirm in ("y", ""):
                 verified_joints[mid] = "PASSED"
                 print(f"[VERIFIED] {mname} direction confirmed correct!")
@@ -204,7 +264,7 @@ def main() -> int:
 
     finally:
         try:
-            robot.disable_all()
+            robot.stop(disable_motors=True)
         except Exception:
             pass
 
