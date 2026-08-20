@@ -202,8 +202,8 @@ def main() -> int:
     print("            LeRobot Humanoid - Log Diagnostic Visualizer            ")
     print("=" * 65)
 
-    if not csv_path.exists():
-        print(f"[INFO] Log file '{csv_path}' does not exist yet.")
+    if not csv_path.exists() or csv_path.stat().st_size == 0:
+        print(f"[INFO] Log file '{csv_path}' does not exist or is empty.")
         print("  Generating synthetic example log data for demonstration...")
         # Create a quick synthetic demo CSV file
         with open(csv_path, "w", newline="") as f:
@@ -225,6 +225,10 @@ def main() -> int:
 
     rows = load_log_data(csv_path)
     analysis = analyze_log(rows)
+
+    if "error" in analysis or not rows:
+        print(f"[ERROR] Could not analyze log file: {analysis.get('error', 'No data rows found')}")
+        return 1
 
     print(f"Log File      : {csv_path.resolve()}")
     print(f"Total Samples : {analysis['num_samples']}")

@@ -69,7 +69,15 @@ Reference assets used below are stored in this repo:
 - `docs/calibration_assets/zero_refs/ankle_zero2.jpg`
 - `docs/calibration_assets/zero_refs/ankle_calibration_tool.stl`
 
-### Setup
+### Automated Interactive Wizard (Recommended)
+
+You can run the interactive CLI zeroing wizard which walks through each joint step-by-step with visual guidance:
+
+```bash
+uv run python tools/interactive_zeroing.py
+```
+
+### Manual IPython Setup (Alternative)
 
 Use `uv run ipython`, then:
 
@@ -196,6 +204,14 @@ If mismatch appears:
 
 ## 7. Control-Mode Micro-Motion Test
 
+### Interactive CLI Verifier (Recommended)
+
+```bash
+uv run python tools/joint_nudge_tester.py
+```
+
+### Manual Verification in IPython
+
 Only after read-only checks pass:
 
 ```python
@@ -267,6 +283,20 @@ Do not reduce safety margins to force motion.
 
 ## 10. IMU Validation
 
+### Diagnostic & Zero-Bias Tool (Recommended)
+
+Run the IMU calibration tool to sample static biases and verify coordinate frame roll/pitch conventions:
+
+```bash
+# For BNO055:
+uv run python tools/imu_calibration_tool.py --sensor bno055
+
+# For BNO085:
+uv run python tools/imu_calibration_tool.py --sensor bno085
+```
+
+### IPython Verification
+
 From the read-only snapshot:
 
 ```python
@@ -286,6 +316,12 @@ Recommended:
 - save terminal session,
 - save key snapshots from `get_combined_state_snapshot()`,
 - keep CSV logs from controller/agent runs when testing with policy.
+
+Visualize controller CSV logs and generate an interactive HTML report:
+
+```bash
+uv run python tools/log_visualizer.py --log-file bipedal_state_log.csv
+```
 
 For structured identification datasets, use:
 
