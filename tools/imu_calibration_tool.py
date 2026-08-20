@@ -153,6 +153,17 @@ def main() -> int:
         print(f"[ERROR] Failed to initialize IMU backend '{args.sensor}': {exc}")
         return 1
 
+    # Check backend readiness
+    initial_snap = imu_dev.read_dict()
+    if not initial_snap.get("available", True) and args.sensor != "mock":
+        err_msg = initial_snap.get("error", "Unknown error")
+        print(f"\n[ERROR] IMU backend '{args.sensor}' is not available: {err_msg}")
+        print("  Troubleshooting suggestions:")
+        print("    1. Use 'uv run python tools/imu_calibration_tool.py --sensor ...' to use the project venv.")
+        print("    2. Check hardware bus: `i2cdetect -y 1` (for I2C) or `ls -l /dev/ttyAMA0` (for UART).")
+        print("    3. If testing without hardware, run with `--sensor mock`.\n")
+        return 1
+
     calib_data = run_static_calibration(imu_dev, args.samples)
     if not calib_data:
         return 1

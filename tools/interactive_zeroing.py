@@ -9,15 +9,24 @@ waits for confirmation (pressing Enter), and sends the motor zero command (CAN_C
 For the feet (Ankles), it prompts once per leg to set the physical ankle alignment tool,
 and zeroes the paired ankle motors simultaneously (IDs 5 & 6 for Left, IDs 11 & 12 for Right).
 
+Works seamlessly with:
+1) Direct system python on Linux/Raspberry Pi (zero dependencies, native socketcan)
+2) uv virtualenv (`uv run python tools/interactive_zeroing.py`)
+3) Dry-run mock testing (`--use-mock-bus`)
+
 Usage:
-    # On real hardware (Raspberry Pi 5 with can0 & can1 up):
+    # On physical robot (Raspberry Pi 5 with can0 & can1 up):
     uv run python tools/interactive_zeroing.py
+    # or directly with system python:
+    python tools/interactive_zeroing.py
 
     # Dry-run test with mock CAN buses:
-    uv run python tools/interactive_zeroing.py --use-mock-bus
+    python tools/interactive_zeroing.py --use-mock-bus
 """
 
 import argparse
+import socket
+import struct
 import sys
 import time
 from pathlib import Path
@@ -31,8 +40,11 @@ if str(REPO_ROOT) not in sys.path:
 from robot.root_constant import (
     CAN0_MOTOR_IDS,
     CAN1_MOTOR_IDS,
+    CAN_CMD_ZERO,
     MOTORS,
 )
+
+CAN_FRAME_STRUCT_FMT = "=IB3x8s"
 
 
 def parse_args() -> argparse.Namespace:
@@ -186,61 +198,116 @@ def get_joint_sequence() -> list[dict]:
     ]
 
 
-class DummyMockBus:
-    """Lightweight dummy CAN bus for dry-run zeroing without hardware dependencies."""
-    def send(self, msg: Any) -> None:
+class MockZeroer:
+    """Mock zeroing handler for offline testing."""
+    def set_zero(self, motor_id: int) -> bool:
+        time.sleep(0.02)
+        return True
+
+    def close(self) -> None:
         pass
 
-    def recv(self, timeout: float = 0.5) -> None:
-        return None
 
-    def shutdown(self) -> None:
-        pass
+class NativeSocketCANZeroer:
+    """Zero-dependency Linux SocketCAN transmitter using Python built-in socket module."""
+    def __init__(self, channel_can0: str = "can0", channel_can1: str = "can1"):
+        self.channel_can0 = channel_can0
+        self.channel_can1 = channel_can1
+        self._sock_can0 = None
+        self._sock_can1 = None
+
+        if not hasattr(socket, "AF_CAN"):
+            raise RuntimeError("AF_CAN is only supported on Linux kernel systems.")
+
+        try:
+            self._sock_can0 = socket.socket(socket.AF_CAN, socket.SOCK_RAW, socket.CAN_RAW)
+            self._sock_can0.bind((channel_can0,))
+        except Exception as exc:
+            self.close()
+            raise RuntimeError(f"Could not bind to CAN interface '{channel_can0}': {exc}") from exc
+
+        try:
+            self._sock_can1 = socket.socket(socket.AF_CAN, socket.SOCK_RAW, socket.CAN_RAW)
+            self._sock_can1.bind((channel_can1,))
+        except Exception as exc:
+            self.close()
+            raise RuntimeError(f"Could not bind to CAN interface '{channel_can1}': {exc}") from exc
+
+    def set_zero(self, motor_id: int) -> bool:
+        sock = self._sock_can0 if motor_id <= 6 else self._sock_can1
+        channel = self.channel_can0 if motor_id <= 6 else self.channel_can1
+        if sock is None:
+            raise RuntimeError(f"CAN socket for {channel} not open.")
+
+        payload = bytes([0xFF] * 7 + [CAN_CMD_ZERO])
+        frame = struct.pack(CAN_FRAME_STRUCT_FMT, int(motor_id), 8, payload)
+        sock.send(frame)
+        time.sleep(0.05)
+        return True
+
+    def close(self) -> None:
+        if self._sock_can0 is not None:
+            try:
+                self._sock_can0.close()
+            except Exception:
+                pass
+            self._sock_can0 = None
+        if self._sock_can1 is not None:
+            try:
+                self._sock_can1.close()
+            except Exception:
+                pass
+            self._sock_can1 = None
 
 
-def init_robot_controller(args: argparse.Namespace):
-    """Initialize the robot controller for real hardware or dry-run mock mode."""
-    from robot.bipedal_robot import BipedalRobotController
+class ControllerZeroer:
+    """Wrapper using BipedalRobotController when python-can is installed."""
+    def __init__(self, controller: Any):
+        self.controller = controller
 
+    def set_zero(self, motor_id: int) -> bool:
+        self.controller.set_zero(motor_id)
+        return True
+
+    def close(self) -> None:
+        try:
+            self.controller.disable_all()
+        except Exception:
+            pass
+
+
+def init_zeroer(args: argparse.Namespace):
+    """Initialize zeroer backend: mock, BipedalRobotController, or native SocketCAN."""
     if args.use_mock_bus or "--use-mock-bus" in sys.argv:
         print("[INIT] Operating in dry-run mode (--use-mock-bus)...")
-        try:
-            from lerobot.motors import Motor, MotorNormMode
-            from lerobot_humanoid_lerobot_integration.lerobot_humanoid import HUMANOID_MOTOR_TYPE_BY_ID
-            from lerobot_humanoid_lerobot_integration.robstride_mock_bus import RobstrideMockBus
+        return MockZeroer()
 
-            def _build_motors(mids):
-                return {
-                    f"m{mid}": Motor(
-                        id=int(mid),
-                        model="robstride",
-                        norm_mode=MotorNormMode.DEGREES,
-                        motor_type_str=str(HUMANOID_MOTOR_TYPE_BY_ID.get(int(mid), "o0")),
-                        recv_id=int(mid),
-                    )
-                    for mid in mids
-                }
-
-            bus_can0 = RobstrideMockBus(motors=_build_motors(CAN0_MOTOR_IDS))
-            bus_can1 = RobstrideMockBus(motors=_build_motors(CAN1_MOTOR_IDS))
-        except Exception:
-            bus_can0 = DummyMockBus()
-            bus_can1 = DummyMockBus()
-        robot = BipedalRobotController(bus_can0=bus_can0, bus_can1=bus_can1)
-    else:
-        print(f"[INIT] Opening real CAN interfaces ({args.channel_can0}, {args.channel_can1})...")
-        try:
-            robot = BipedalRobotController(
-                channel_can0=args.channel_can0,
-                channel_can1=args.channel_can1,
-            )
-        except Exception as exc:
-            print(f"\n[ERROR] Could not open CAN interfaces: {exc}")
-            print("  Make sure CAN interfaces are up (e.g., `sudo ip link set can0 up...`).")
-            print("  Or run with `--use-mock-bus` for a dry run test.\n")
+    # Try BipedalRobotController first if python-can is installed
+    try:
+        from robot.bipedal_robot import BipedalRobotController
+        print(f"[INIT] Opening CAN interfaces ({args.channel_can0}, {args.channel_can1}) via BipedalRobotController...")
+        robot = BipedalRobotController(
+            channel_can0=args.channel_can0,
+            channel_can1=args.channel_can1,
+        )
+        robot._estop = False
+        robot._estop_reason = ""
+        return ControllerZeroer(robot)
+    except Exception as ctrl_exc:
+        # Fall back to zero-dependency native Linux SocketCAN
+        if hasattr(socket, "AF_CAN"):
+            print(f"[INIT] python-can controller unavailable ({ctrl_exc}).")
+            print(f"[INIT] Falling back to native Linux SocketCAN ({args.channel_can0}, {args.channel_can1})...")
+            try:
+                return NativeSocketCANZeroer(args.channel_can0, args.channel_can1)
+            except Exception as sock_exc:
+                print(f"\n[ERROR] Native SocketCAN error: {sock_exc}")
+                print("  Make sure CAN interfaces are up (`sudo ip link set can0 up...`).\n")
+                sys.exit(1)
+        else:
+            print(f"\n[ERROR] Could not initialize CAN: {ctrl_exc}")
+            print("  Run with `uv run python tools/interactive_zeroing.py` or use `--use-mock-bus` for testing.\n")
             sys.exit(1)
-
-    return robot
 
 
 def main() -> int:
@@ -257,11 +324,7 @@ def main() -> int:
     print("=" * 70)
     print()
 
-    robot = init_robot_controller(args)
-    # Ensure estop flag is cleared so set_zero commands are transmitted
-    robot._estop = False
-    robot._estop_reason = ""
-
+    zeroer = init_zeroer(args)
     sequence = get_joint_sequence()
     zeroed_motors: list[int] = []
 
@@ -296,7 +359,7 @@ def main() -> int:
                     # Send zero command to each motor in this step
                     for mid in motor_ids:
                         print(f"  [CAN] Transmitting CAN_CMD_ZERO (0xFE) to Motor ID {mid}...", end="", flush=True)
-                        robot.set_zero(mid)
+                        zeroer.set_zero(mid)
                         print(" [OK] Zero set!")
                         if mid not in zeroed_motors:
                             zeroed_motors.append(mid)
@@ -313,11 +376,7 @@ def main() -> int:
         print("=" * 70)
 
     finally:
-        # Disable background threads or bus executors cleanly
-        try:
-            robot.disable_all()
-        except Exception:
-            pass
+        zeroer.close()
 
     return 0
 

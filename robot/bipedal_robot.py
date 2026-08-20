@@ -10,7 +10,11 @@ import logging
 import threading
 import time
 
-import can
+try:
+    import can
+except ImportError:
+    can = None
+
 import numpy as np
 
 from hardware.mit_codec import MotorState, decode_state_frame, pack_mit_command
@@ -87,8 +91,26 @@ class BipedalRobotController:
         log_path: Union[str, Path] = "bipedal_state_log.csv",
         imu: Optional[Any] = None,
     ):
-        self.bus_can0 = bus_can0 if bus_can0 is not None else can.interface.Bus(interface=interface, channel=channel_can0)
-        self.bus_can1 = bus_can1 if bus_can1 is not None else can.interface.Bus(interface=interface, channel=channel_can1)
+        if bus_can0 is not None:
+            self.bus_can0 = bus_can0
+        elif can is not None:
+            self.bus_can0 = can.interface.Bus(interface=interface, channel=channel_can0)
+        else:
+            raise RuntimeError(
+                "python-can is not installed. Either run with 'uv run python ...', "
+                "install python-can via 'pip install python-can', or pass mock buses."
+            )
+
+        if bus_can1 is not None:
+            self.bus_can1 = bus_can1
+        elif can is not None:
+            self.bus_can1 = can.interface.Bus(interface=interface, channel=channel_can1)
+        else:
+            raise RuntimeError(
+                "python-can is not installed. Either run with 'uv run python ...', "
+                "install python-can via 'pip install python-can', or pass mock buses."
+            )
+
         self.control_hz = float(control_hz)
         self.recv_timeout_s = float(recv_timeout_s)
         self.mode = "state_only"
@@ -743,7 +765,7 @@ class BipedalRobotController:
 
         return [mid for mid in ids if mid not in touched]
 
-    def _try_update_state_from_msg(self, msg: can.Message) -> Optional[int]:
+    def _try_update_state_from_msg(self, msg: Any) -> Optional[int]:
         try:
             raw = bytes(msg.data)
             mid = int(raw[0])
