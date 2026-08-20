@@ -45,20 +45,20 @@ class MotorConstants:
 
 
 MOTORS: Dict[int, MotorConstants] = {
-    # Right leg on can0: IDs 1..6
-    1: MotorConstants(1, "right_hipz", 12.57, 33.0, 14.0),
-    2: MotorConstants(2, "right_hipx", 12.57, 33.0, 20.0),
-    3: MotorConstants(3, "right_hipy", 12.57, 33.0, 60.0),
-    4: MotorConstants(4, "right_knee", 12.57, 33.0, 60.0),
-    5: MotorConstants(5, "right_ankle1", 12.57, 50.0, 5.5),
-    6: MotorConstants(6, "right_ankle2", 12.57, 50.0, 5.5),
-    # Left leg on can1: IDs 7..12
-    7: MotorConstants(7, "left_hipz", 12.57, 33.0, 14.0),
-    8: MotorConstants(8, "left_hipx", 12.57, 33.0, 20.0),
-    9: MotorConstants(9, "left_hipy", 12.57, 33.0, 60.0),
-    10: MotorConstants(10, "left_knee", 12.57, 33.0, 60.0),
-    11: MotorConstants(11, "left_ankle1", 12.57, 50.0, 5.5),
-    12: MotorConstants(12, "left_ankle2", 12.57, 50.0, 5.5),
+    # Left leg on can0: IDs 1..6
+    1: MotorConstants(1, "left_hipz", 12.57, 33.0, 14.0),
+    2: MotorConstants(2, "left_hipx", 12.57, 33.0, 20.0),
+    3: MotorConstants(3, "left_hipy", 12.57, 33.0, 60.0),
+    4: MotorConstants(4, "left_knee", 12.57, 33.0, 60.0),
+    5: MotorConstants(5, "left_ankle1", 12.57, 50.0, 5.5),
+    6: MotorConstants(6, "left_ankle2", 12.57, 50.0, 5.5),
+    # Right leg on can1: IDs 7..12
+    7: MotorConstants(7, "right_hipz", 12.57, 33.0, 14.0),
+    8: MotorConstants(8, "right_hipx", 12.57, 33.0, 20.0),
+    9: MotorConstants(9, "right_hipy", 12.57, 33.0, 60.0),
+    10: MotorConstants(10, "right_knee", 12.57, 33.0, 60.0),
+    11: MotorConstants(11, "right_ankle1", 12.57, 50.0, 5.5),
+    12: MotorConstants(12, "right_ankle2", 12.57, 50.0, 5.5),
 }
 MOTOR_IDS: Tuple[int, ...] = tuple(sorted(MOTORS.keys()))
 CAN0_MOTOR_IDS: Tuple[int, ...] = (1, 2, 3, 4, 5, 6)
@@ -106,7 +106,7 @@ DIRECT_JOINT_CALIBRATION_RIGHT = {
 DIRECT_JOINT_CALIBRATION_LEFT = {
     "hipz": {"motor_id": 7, "sign": +1.0, "offset_deg": 0.0},
     "hipx": {"motor_id": 8, "sign": +1.0, "offset_deg": 0.0},
-    "hipy": {"motor_id": 9, "sign": +1.0, "offset_deg": 0.0},
+    "hipy": {"motor_id": 9, "sign": -1.0, "offset_deg": 0.0},
     "knee": {"motor_id": 10, "sign": +1.0, "offset_deg": 0.0},
 }
 
@@ -144,6 +144,7 @@ for cfg in DIRECT_JOINT_CALIBRATION_RIGHT.values():
 MOTOR_SIGN[4] = -1.0    # Right knee
 MOTOR_SIGN[5] = -1.0    # Right ankle 1
 MOTOR_SIGN[6] = -1.0    # Right ankle 2
+MOTOR_SIGN[9] = -1.0    # Left hip pitch (mirrored from right)
 MOTOR_SIGN[10] = +1.0   # Left knee
 MOTOR_SIGN[11] = -1.0   # Left ankle 1
 MOTOR_SIGN[12] = -1.0   # Left ankle 2
@@ -160,21 +161,21 @@ DEFAULT_GAINS = {
 
 # -------------------------
 # Safety limits (deg)
-# For physically zeroed joints (reference pose = 0.0 deg).
+# For physically zeroed joints with generous idle/standing headroom.
 # -------------------------
 JOINT_LIMITS_DEG = {
-    1: (-45.0, 45.0),      # Left Hip Yaw (Z)
-    2: (-35.0, 35.0),      # Left Hip Roll (X)
-    3: (-60.0, 60.0),      # Left Hip Pitch (Y)
-    4: (-15.0, 115.0),     # Left Knee
-    5: (-50.0, 50.0),      # Left Ankle 1
-    6: (-50.0, 50.0),      # Left Ankle 2
-    7: (-45.0, 45.0),      # Right Hip Yaw (Z)
-    8: (-35.0, 35.0),      # Right Hip Roll (X)
-    9: (-60.0, 60.0),      # Right Hip Pitch (Y)
-    10: (-15.0, 115.0),    # Right Knee
-    11: (-50.0, 50.0),     # Right Ankle 1
-    12: (-50.0, 50.0),     # Right Ankle 2
+    1: (-60.0, 60.0),       # Right Hip Yaw (Z)
+    2: (-90.0, 90.0),       # Right Hip Roll (X)
+    3: (-115.0, 115.0),     # Right Hip Pitch (Y)
+    4: (-120.0, 120.0),     # Right Knee
+    5: (-60.0, 60.0),       # Right Ankle 1
+    6: (-60.0, 60.0),       # Right Ankle 2
+    7: (-60.0, 60.0),       # Left Hip Yaw (Z)
+    8: (-90.0, 90.0),       # Left Hip Roll (X)
+    9: (-115.0, 115.0),     # Left Hip Pitch (Y)
+    10: (-120.0, 120.0),    # Left Knee
+    11: (-60.0, 60.0),      # Left Ankle 1
+    12: (-60.0, 60.0),      # Left Ankle 2
 }
 
 COMMAND_MARGIN_DEG = 1.0
