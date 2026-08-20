@@ -107,7 +107,8 @@ def get_joint_sequence() -> list[dict]:
             "motor_ids": [3],
             "instruction": (
                 "Physically align Right Hip Y (Motor 3) to its zero position:\n"
-                "  • Align thigh member pointing straight down vertically.\n"
+                "  • Point thigh straight DOWN vertically inline with torso frame (standing pose = 0 deg).\n"
+                "  • Note: The reference photo was taken with the robot lying on a table; on a gantry, the leg hangs straight down.\n"
                 "  • Reference image: docs/calibration_assets/zero_refs/hipy_zero.jpg"
             ),
         },
@@ -118,7 +119,7 @@ def get_joint_sequence() -> list[dict]:
             "motor_ids": [4],
             "instruction": (
                 "Physically align Right Knee (Motor 4) to its zero position:\n"
-                "  • Fully extend shin straight down with the thigh (0 deg knee flexion).\n"
+                "  • Fully extend shin straight down with the thigh (standing pose = 0 deg knee flexion).\n"
                 "  • Reference image: docs/calibration_assets/zero_refs/knee_zero.jpg"
             ),
         },
@@ -131,7 +132,7 @@ def get_joint_sequence() -> list[dict]:
                 "Physically align Right Ankle/Foot using the Printed Alignment Tool:\n"
                 "  • Motors 5 & 6 are both mounted inside the Right Tibia (shin) driving the parallel rods.\n"
                 "  • Mount the 3D-printed tool (docs/calibration_assets/zero_refs/ankle_calibration_tool.stl)\n"
-                "    between the tibia (shin) and the foot to lock the ankle at 90 deg.\n"
+                "    between the tibia (shin) and the foot to lock the ankle at 90 deg (foot flat to floor).\n"
                 "  • Both Tibia Motors 5 and 6 will be zeroed together in this step.\n"
                 "  • Reference image: docs/calibration_assets/zero_refs/ankle_zero2.jpg"
             ),
@@ -166,7 +167,8 @@ def get_joint_sequence() -> list[dict]:
             "motor_ids": [9],
             "instruction": (
                 "Physically align Left Hip Y (Motor 9) to its zero position:\n"
-                "  • Align thigh member pointing straight down vertically.\n"
+                "  • Point thigh straight DOWN vertically inline with torso frame (standing pose = 0 deg).\n"
+                "  • Note: The reference photo was taken with the robot lying on a table; on a gantry, the leg hangs straight down.\n"
                 "  • Reference image: docs/calibration_assets/zero_refs/hipy_zero.jpg"
             ),
         },
@@ -177,7 +179,7 @@ def get_joint_sequence() -> list[dict]:
             "motor_ids": [10],
             "instruction": (
                 "Physically align Left Knee (Motor 10) to its zero position:\n"
-                "  • Fully extend shin straight down with the thigh (0 deg knee flexion).\n"
+                "  • Fully extend shin straight down with the thigh (standing pose = 0 deg knee flexion).\n"
                 "  • Reference image: docs/calibration_assets/zero_refs/knee_zero.jpg"
             ),
         },

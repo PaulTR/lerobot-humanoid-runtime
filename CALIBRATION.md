@@ -120,11 +120,15 @@ i2cdetect -y 1
 
 #### hipy
 
+Position thigh straight DOWN vertically inline with torso frame (neutral standing pose, 0° pitch).
+
 | hipy zero |
 |---|
 | ![hipy zero reference](docs/calibration_assets/zero_refs/hipy_zero.jpg) |
 
 #### knee
+
+Position shin straight DOWN vertically inline with thigh (neutral standing pose, 0° knee bend).
 
 | knee zero |
 |---|
@@ -134,7 +138,7 @@ i2cdetect -y 1
 
 1. Print the ankle calibration tool STL:
    - `docs/calibration_assets/zero_refs/ankle_calibration_tool.stl`
-2. Install/use the tool as shown below to set the mechanical ankle reference before zeroing.
+2. Install/use the tool as shown below to set the mechanical ankle reference (foot flat, 90° to shin) before zeroing.
 
 | ankle zero with tool |
 |---|
@@ -142,7 +146,7 @@ i2cdetect -y 1
 
 ### Zero command sequence
 
-After placing each joint to the matching reference picture, send zero command for the corresponding motor IDs:
+Zero the robot in its **neutral standing stance** (thighs straight down, knees straight, feet flat at 90°). Send zero commands for the corresponding motor IDs:
 
 ```python
 # hipz
