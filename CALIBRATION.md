@@ -161,7 +161,19 @@ robot.set_zero(4); robot.set_zero(10)
 robot.set_zero(5); robot.set_zero(6)
 robot.set_zero(11); robot.set_zero(12)
 ```
-## 5. Start in Read-Only Mode
+## 5. Start in Read-Only Mode & Motor ID Verification
+
+### Fast CLI Bus Scanner (Recommended)
+
+Run the motor ID scanner to verify all 12 motors are responding on `can0` and `can1`:
+
+```bash
+python tools/scan_motors.py
+# or via uv:
+uv run python tools/scan_motors.py
+```
+
+### Detailed IPython Inspection
 
 Use `uv run ipython`, then:
 

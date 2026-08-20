@@ -97,17 +97,17 @@ MODEL_JOINT_TO_MOTOR_LEFT = {
 # (for direct joints only)
 # -------------------------
 DIRECT_JOINT_CALIBRATION_RIGHT = {
-    "hipz": {"motor_id": 7, "sign": +1.0, "offset_deg": -132.68},
-    "hipx": {"motor_id": 8, "sign": +1.0, "offset_deg": -19.394},
-    "hipy": {"motor_id": 9, "sign": +1.0, "offset_deg": -88.096},
-    "knee": {"motor_id": 10, "sign": +1.0, "offset_deg": 57.352},
+    "hipz": {"motor_id": 7, "sign": +1.0, "offset_deg": 0.0},
+    "hipx": {"motor_id": 8, "sign": +1.0, "offset_deg": 0.0},
+    "hipy": {"motor_id": 9, "sign": +1.0, "offset_deg": 0.0},
+    "knee": {"motor_id": 10, "sign": +1.0, "offset_deg": 0.0},
 }
 
 DIRECT_JOINT_CALIBRATION_LEFT = {
-    "hipz": {"motor_id": 1, "sign": +1.0, "offset_deg": 132.68},
-    "hipx": {"motor_id": 2, "sign": +1.0, "offset_deg": 19.394},
-    "hipy": {"motor_id": 3, "sign": +1.0, "offset_deg": 88.096},
-    "knee": {"motor_id": 4, "sign": +1.0, "offset_deg": 57.352},
+    "hipz": {"motor_id": 1, "sign": +1.0, "offset_deg": 0.0},
+    "hipx": {"motor_id": 2, "sign": +1.0, "offset_deg": 0.0},
+    "hipy": {"motor_id": 3, "sign": +1.0, "offset_deg": 0.0},
+    "knee": {"motor_id": 4, "sign": +1.0, "offset_deg": 0.0},
 }
 
 
@@ -159,22 +159,21 @@ DEFAULT_GAINS = {
 
 # -------------------------
 # Safety limits (deg)
-# Updated from first raw limit scan notes.
-# Values flagged as "-360" were wrap-corrected before being entered here.
+# For physically zeroed joints (reference pose = 0.0 deg).
 # -------------------------
 JOINT_LIMITS_DEG = {
-    1: (-210., -50.),   # raw m1 minus 360
-    2: (-70.0, 70.0),    # raw m2 minus 360
-    3: (-168.065, 0),     # raw m3 minus 360
-    4: (0.978, 112.172),      # raw m4
-    5: (-89.753, 25.042),     # raw m5
-    6: (-25.14, 285.830),    # raw m6
-    7: (50.0, 210.),     # raw m7
-    8: (-70.0, 70.0),     # raw m8 minus 360
-    9: (-0.0, 162.438),     # raw m9
-    10: (-98.105, -0.693),    # raw m10 minus 360
-    11: (-25.50, 87.972),     # raw m11
-    12: (-78.191, 20.9),   # raw m12
+    1: (-45.0, 45.0),      # Left Hip Yaw (Z)
+    2: (-35.0, 35.0),      # Left Hip Roll (X)
+    3: (-60.0, 60.0),      # Left Hip Pitch (Y)
+    4: (-15.0, 115.0),     # Left Knee
+    5: (-50.0, 50.0),      # Left Ankle 1
+    6: (-50.0, 50.0),      # Left Ankle 2
+    7: (-45.0, 45.0),      # Right Hip Yaw (Z)
+    8: (-35.0, 35.0),      # Right Hip Roll (X)
+    9: (-60.0, 60.0),      # Right Hip Pitch (Y)
+    10: (-15.0, 115.0),    # Right Knee
+    11: (-50.0, 50.0),     # Right Ankle 1
+    12: (-50.0, 50.0),     # Right Ankle 2
 }
 
 COMMAND_MARGIN_DEG = 1.0
