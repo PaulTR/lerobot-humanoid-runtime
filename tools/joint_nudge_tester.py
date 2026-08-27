@@ -45,11 +45,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Single-Joint Nudge & Motion Direction Verifier."
     )
-    parser.add_argument("--channel-can0", default="can0", help="CAN interface for left leg (default: can0)")
-    parser.add_argument("--channel-can1", default="can1", help="CAN interface for right leg (default: can1)")
+    parser.add_argument("--channel-can0", default="can0", help="CAN interface for right leg / IDs 1-6 (default: can0)")
+    parser.add_argument("--channel-can1", default="can1", help="CAN interface for left leg / IDs 7-12 (default: can1)")
     parser.add_argument("--use-mock-bus", action="store_true", help="Use mock CAN buses for testing")
-    parser.add_argument("--kp", type=float, default=25.0, help="Kp stiffness gain for active joint (default: 25.0)")
-    parser.add_argument("--kd", type=float, default=0.2, help="Kd damping gain for active joint (default: 0.2)")
+    parser.add_argument("--kp", type=float, default=40.0, help="Kp stiffness gain for active joint (default: 40.0)")
+    parser.add_argument("--kd", type=float, default=0.4, help="Kd damping gain for active joint (default: 0.4)")
+    parser.add_argument("--duration", type=float, default=2.5, help="Duration in seconds to hold nudge (default: 2.5s)")
     return parser.parse_args()
 
 
@@ -84,7 +85,7 @@ def init_controller(args: argparse.Namespace):
         )
 
     # Allow command deltas during interactive testing
-    robot.set_max_command_delta(80.0)
+    robot.set_max_command_delta(120.0)
 
     # Start background control loop in safe state_only mode initially
     robot.start(mode="state_only", auto_enable=False)
@@ -100,23 +101,30 @@ def init_controller(args: argparse.Namespace):
 
 
 def print_menu():
-    print("=" * 65)
-    print("           Single-Joint Micro-Nudge Testing Menu           ")
-    print("=" * 65)
+    print("=" * 68)
+    print("            Single-Joint Micro-Nudge Testing Menu            ")
+    print("=" * 68)
     for mid in sorted(MOTORS.keys()):
         m = MOTORS[mid]
         leg = "Right" if mid <= 6 else "Left "
-        print(f"  [{mid:>2}] {leg} {m.name:<15} (Bus: {'can0' if mid <= 6 else 'can1'})")
-    print("=" * 65)
+        bus = "can0" if mid <= 6 else "can1"
+        print(f"  [{mid:>2}] {leg} {m.name:<15} (Bus: {bus}, Model: {getattr(m, 'motor_type', 'MIT')})")
+    print("=" * 68)
     print("Commands: Select Motor ID (1-12), 'zero' for zero pose, 'gains' to change Kp/Kd, 'q' to exit")
-    print("=" * 65)
+    print("=" * 68)
 
 
-def nudge_motor(robot, motor_id: int, nudge_deg: float, args: argparse.Namespace, *, relative: bool = False) -> None:
+def nudge_motor(
+    robot,
+    motor_id: int,
+    delta_deg: float,
+    args: argparse.Namespace,
+    *,
+    relative: bool = True,
+) -> None:
     mname = MOTORS[motor_id].name
-    side = "right" if motor_id <= 6 else "left"
 
-    # Map motor ID to joint key
+    # Map motor ID to joint key & side
     joint_map = {
         1: ("right", "hipz"),
         2: ("right", "hipx"),
@@ -133,22 +141,24 @@ def nudge_motor(robot, motor_id: int, nudge_deg: float, args: argparse.Namespace
     }
     target_side, joint_key = joint_map[motor_id]
 
-    # Get current live joint positions
+    # Sample current live joint positions
     snap = robot.get_combined_state_snapshot()
     cur_raw = {mid: snap.get("motors", {}).get(mid, {}).get("raw_position_deg", 0.0) for mid in MOTOR_IDS}
     q_cur = robot.motor_state_to_joint_state(cur_raw, output_radians=False, nq=12)
 
     # In model joint array: Left is 0..5, Right is 6..11
     joint_idx_map = {
-        7: 0, 8: 1, 9: 2, 10: 3, 11: 4, 12: 5, # Left
+        7: 0, 8: 1, 9: 2, 10: 3, 11: 4, 12: 5,  # Left
         1: 6, 2: 7, 3: 8, 4: 9, 5: 10, 6: 11,   # Right
     }
     cur_joint_val = float(q_cur[joint_idx_map[motor_id]])
-    target_val = (cur_joint_val + nudge_deg) if relative else nudge_deg
+    target_val = (cur_joint_val + delta_deg) if relative else delta_deg
 
-    print(f"\n[NUDGE] Commanding {mname} (m{motor_id}) -> {target_val:+.1f}° (Kp={args.kp}, Kd={args.kd})...")
+    print(f"\n[NUDGE] Commanding {mname} (m{motor_id})")
+    print(f"        Start Angle: {cur_joint_val:+.2f}° -> Target: {target_val:+.2f}° (Delta: {delta_deg:+.2f}°)")
+    print(f"        Gains: Kp={args.kp}, Kd={args.kd} | Duration: {args.duration}s")
 
-    # Set soft quiet holding gains on unselected motors, and active gains on test motor
+    # Set soft holding gains on unselected motors, and active high-torque gains on test motor
     for mid in MOTOR_IDS:
         if mid == motor_id or (motor_id in (5, 6) and mid in (5, 6)) or (motor_id in (11, 12) and mid in (11, 12)):
             robot.set_joint_gains(mid, kp=args.kp, kd=args.kd)
@@ -170,16 +180,24 @@ def nudge_motor(robot, motor_id: int, nudge_deg: float, args: argparse.Namespace
     else:
         target_right[joint_key] = float(target_val)
 
-    # Clear estop, switch to control mode, and enable
+    # 1. Clear E-STOP and transition to control mode
     robot.clear_estop()
     robot.set_mode("control")
-    robot.enable_all()
-    robot.set_action(left=target_left, right=target_right)
+    time.sleep(0.02)
 
-    # Stream live feedback for 2.0 seconds
-    print("  Streaming live feedback:")
-    t_end = time.time() + 2.0
+    # 2. Enable motors (repeat twice with delay to ensure Robstride MIT mode activation)
+    robot.enable_all()
+    time.sleep(0.05)
+    robot.enable_all()
+    time.sleep(0.05)
+
+    # 3. Continuous action stream & live feedback loop (prevents background loop state-latch override)
+    print("  Streaming live motion feedback:")
+    t_end = time.time() + float(args.duration)
     while time.time() < t_end:
+        # Continuously refresh action setpoint
+        robot.set_action(left=target_left, right=target_right)
+
         snap = robot.get_combined_state_snapshot()
         st = snap.get("motors", {}).get(motor_id, {})
         meas_deg = st.get("calibrated_position_deg", 0.0)
@@ -189,8 +207,9 @@ def nudge_motor(robot, motor_id: int, nudge_deg: float, args: argparse.Namespace
         estop_reason = snap.get("estop_reason", "")
 
         status_txt = "RUNNING" if not estop else f"E-STOP: {estop_reason}"
+        delta_achieved = meas_deg - cur_joint_val
         sys.stdout.write(
-            f"\r  --> Target: {target_val:+.1f}° | Calibrated: {meas_deg:+6.2f}° (Raw: {raw_deg:+6.2f}°) | Torque: {tau:+5.2f}Nm | [{status_txt}]"
+            f"\r  --> Target: {target_val:+6.1f}° | Cal: {meas_deg:+6.2f}° (Δ {delta_achieved:+5.1f}°) | Torque: {tau:+5.2f}Nm | [{status_txt}]"
         )
         sys.stdout.flush()
         time.sleep(0.05)
@@ -232,10 +251,14 @@ def main() -> int:
                 robot.clear_estop()
                 robot.set_mode("control")
                 robot.enable_all()
+                time.sleep(0.05)
+                robot.enable_all()
                 for mid in MOTOR_IDS:
                     robot.set_joint_gains(mid, kp=args.kp, kd=args.kd)
-                robot.set_action(left=zero, right=zero)
-                time.sleep(1.0)
+                for _ in range(20):
+                    robot.set_action(left=zero, right=zero)
+                    time.sleep(0.05)
+                print("[ACTION] Zero pose command complete.")
                 continue
 
             try:
@@ -250,21 +273,21 @@ def main() -> int:
             # Sub-menu for selected motor
             mname = MOTORS[mid].name
             print(f"\n--- Testing Motor ID {mid} ({mname}) ---")
-            print("Select Nudge: [1] +2.0°  [2] -2.0°  [3] +5.0°  [4] -5.0°  [5] Custom  [b] Back")
+            print("Select Nudge: [1] +10.0°  [2] -10.0°  [3] +20.0°  [4] -20.0°  [5] Custom Delta  [b] Back")
             action = input("Choice: ").strip().lower()
 
             if action == "1":
-                nudge_motor(robot, mid, +2.0, args)
+                nudge_motor(robot, mid, +10.0, args, relative=True)
             elif action == "2":
-                nudge_motor(robot, mid, -2.0, args)
+                nudge_motor(robot, mid, -10.0, args, relative=True)
             elif action == "3":
-                nudge_motor(robot, mid, +5.0, args)
+                nudge_motor(robot, mid, +20.0, args, relative=True)
             elif action == "4":
-                nudge_motor(robot, mid, -5.0, args)
+                nudge_motor(robot, mid, -20.0, args, relative=True)
             elif action == "5":
                 try:
-                    cdeg = float(input("Enter custom angle delta (deg): "))
-                    nudge_motor(robot, mid, cdeg, args)
+                    cdeg = float(input("Enter relative angle delta (deg, e.g. +15 or -15): "))
+                    nudge_motor(robot, mid, cdeg, args, relative=True)
                 except ValueError:
                     print("[ERROR] Invalid float.")
                     continue
@@ -283,13 +306,13 @@ def main() -> int:
             robot.set_mode("state_only")
             robot.disable_all()
 
-        print("\n=" * 65)
-        print("                MOTION VERIFICATION SUMMARY                ")
-        print("=" * 65)
+        print("\n=" * 68)
+        print("                 MOTION VERIFICATION SUMMARY                 ")
+        print("=" * 68)
         for mid in sorted(MOTOR_IDS):
             status = verified_joints.get(mid, "UNTESTED")
             print(f"  Motor ID {mid:>2} ({MOTORS[mid].name:<15}): {status}")
-        print("=" * 65)
+        print("=" * 68)
 
     finally:
         try:
