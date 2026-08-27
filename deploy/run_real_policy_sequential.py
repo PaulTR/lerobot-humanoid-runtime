@@ -102,7 +102,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--control-hz", type=float, default=100.0)
     p.add_argument("--action-scale", type=float, default=0.0)
     p.add_argument("--joint-vel-source", type=str, default="auto")
-    p.add_argument("--max-command-delta-deg", type=float, default=60.0)
+    p.add_argument("--max-command-delta-deg", type=float, default=120.0)
     p.add_argument("--viz-hz", type=float, default=20.0)
     p.add_argument("--use-mock-bus", action=argparse.BooleanOptionalAction, default=False)
     p.add_argument("--mock-default-temp-c", type=float, default=30.0)

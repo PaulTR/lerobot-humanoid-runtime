@@ -1,0 +1,44 @@
+{
+  "timestamp": "2026-08-08 14:00:33",
+  "sensor": "mock",
+  "calibration": {
+    "accel_bias": [
+      0.0,
+      0.0,
+      9.81
+    ],
+    "gyro_bias": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "accel_std": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "gyro_std": [
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "tilt_check": {
+    "Pitch Forward": {
+      "measured_deg": 0.0,
+      "status": "CHECK FRAME SIGN"
+    },
+    "Pitch Backward": {
+      "measured_deg": 0.0,
+      "status": "CHECK FRAME SIGN"
+    },
+    "Roll Left": {
+      "measured_deg": 0.0,
+      "status": "CHECK FRAME SIGN"
+    },
+    "Roll Right": {
+      "measured_deg": 0.0,
+      "status": "CHECK FRAME SIGN"
+    }
+  }
+}

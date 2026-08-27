@@ -60,26 +60,25 @@ class LeRobotHumanoidConfig(RobotConfig):
     startup_wrap_correction_enabled: bool = True
     startup_wrap_shift_limits: bool = False
     # Match the default real-robot deployment guard used by bipedal controller scripts.
-    max_command_delta_deg: float = 60.0
+    max_command_delta_deg: float = 120.0
     ankle_guard_enabled: bool = True
     ankle_guard_abs_deg: float = 90.0
 
-    # Hardcoded per-motor raw limits (deg), used directly for safety clamping.
-    # No manual calibration workflow is required.
+    # Per-motor safety limits centered around zero-reference posture.
     joint_limits_deg: dict[int, tuple[float, float]] = field(
         default_factory=lambda: {
-            1: (-209.123, -47.685),
-            2: (-129.887, 12.934),
-            3: (-168.065, 1.967),
-            4: (0.978, 112.172),
-            5: (-89.753, 11.542),
-            6: (-18.14, 285.830),
-            7: (64.894, 215.255),
-            8: (-55.311, 40.409),
-            9: (-0.055, 162.438),
-            10: (-98.105, -0.693),
-            11: (-12.50, 87.972),
-            12: (-78.191, 13.9),
+            1: (-60.0, 60.0),       # Right Hip Yaw (Z)
+            2: (-90.0, 90.0),       # Right Hip Roll (X)
+            3: (-115.0, 115.0),     # Right Hip Pitch (Y)
+            4: (-120.0, 120.0),     # Right Knee
+            5: (-60.0, 60.0),       # Right Ankle 1
+            6: (-60.0, 60.0),       # Right Ankle 2
+            7: (-60.0, 60.0),       # Left Hip Yaw (Z)
+            8: (-90.0, 90.0),       # Left Hip Roll (X)
+            9: (-115.0, 115.0),     # Left Hip Pitch (Y)
+            10: (-120.0, 120.0),    # Left Knee
+            11: (-60.0, 60.0),      # Left Ankle 1
+            12: (-60.0, 60.0),      # Left Ankle 2
         }
     )
 

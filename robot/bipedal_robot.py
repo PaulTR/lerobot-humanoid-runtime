@@ -10,7 +10,11 @@ import logging
 import threading
 import time
 
-import can
+try:
+    import can
+except ImportError:
+    can = None
+
 import numpy as np
 
 from hardware.mit_codec import MotorState, decode_state_frame, pack_mit_command
@@ -87,8 +91,26 @@ class BipedalRobotController:
         log_path: Union[str, Path] = "bipedal_state_log.csv",
         imu: Optional[Any] = None,
     ):
-        self.bus_can0 = bus_can0 if bus_can0 is not None else can.interface.Bus(interface=interface, channel=channel_can0)
-        self.bus_can1 = bus_can1 if bus_can1 is not None else can.interface.Bus(interface=interface, channel=channel_can1)
+        if bus_can0 is not None:
+            self.bus_can0 = bus_can0
+        elif can is not None:
+            self.bus_can0 = can.interface.Bus(interface=interface, channel=channel_can0)
+        else:
+            raise RuntimeError(
+                "python-can is not installed. Either run with 'uv run python ...', "
+                "install python-can via 'pip install python-can', or pass mock buses."
+            )
+
+        if bus_can1 is not None:
+            self.bus_can1 = bus_can1
+        elif can is not None:
+            self.bus_can1 = can.interface.Bus(interface=interface, channel=channel_can1)
+        else:
+            raise RuntimeError(
+                "python-can is not installed. Either run with 'uv run python ...', "
+                "install python-can via 'pip install python-can', or pass mock buses."
+            )
+
         self.control_hz = float(control_hz)
         self.recv_timeout_s = float(recv_timeout_s)
         self.mode = "state_only"
@@ -743,7 +765,7 @@ class BipedalRobotController:
 
         return [mid for mid in ids if mid not in touched]
 
-    def _try_update_state_from_msg(self, msg: can.Message) -> Optional[int]:
+    def _try_update_state_from_msg(self, msg: Any) -> Optional[int]:
         try:
             raw = bytes(msg.data)
             mid = int(raw[0])
@@ -917,8 +939,8 @@ class BipedalRobotController:
         tau_raw: Dict[int, float] = {}
 
         direct = {
-            0: 1, 1: 2, 2: 3, 3: 4,
-            6: 7, 7: 8, 8: 9, 9: 10,
+            0: 7, 1: 8, 2: 9, 3: 10,
+            6: 1, 7: 2, 8: 3, 9: 4,
         }
         for qi, mid in direct.items():
             s = float(self.motor_sign[mid])
@@ -927,27 +949,29 @@ class BipedalRobotController:
             qd_raw[mid] = float(qd_deg_s[qi] / s)
             tau_raw[mid] = float(tau_nm[qi] * s)
 
+        # Left ankle: joints 4, 5 -> motors 11, 12
         sp_l = float(ANKLE_COUPLING_CALIBRATION_LEFT["pitch"]["sign"])
         sr_l = float(ANKLE_COUPLING_CALIBRATION_LEFT["roll"]["sign"])
-        s5 = float(self.motor_sign[5])
-        s6 = float(self.motor_sign[6])
-        u_l = float(qd_deg_s[4]) / sp_l
-        v_l = float(qd_deg_s[5]) / sr_l
-        qd_raw[5] = float((u_l + v_l) / s5)
-        qd_raw[6] = float((v_l - u_l) / s6)
-        tau_raw[5] = float(s5 * (0.5 * sp_l * float(tau_nm[4]) + 0.5 * sr_l * float(tau_nm[5])))
-        tau_raw[6] = float(s6 * (-0.5 * sp_l * float(tau_nm[4]) + 0.5 * sr_l * float(tau_nm[5])))
-
-        sp_r = float(ANKLE_COUPLING_CALIBRATION_RIGHT["pitch"]["sign"])
-        sr_r = float(ANKLE_COUPLING_CALIBRATION_RIGHT["roll"]["sign"])
         s11 = float(self.motor_sign[11])
         s12 = float(self.motor_sign[12])
+        u_l = float(qd_deg_s[4]) / sp_l
+        v_l = float(qd_deg_s[5]) / sr_l
+        qd_raw[11] = float((u_l + v_l) / s11)
+        qd_raw[12] = float((v_l - u_l) / s12)
+        tau_raw[11] = float(s11 * (0.5 * sp_l * float(tau_nm[4]) + 0.5 * sr_l * float(tau_nm[5])))
+        tau_raw[12] = float(s12 * (-0.5 * sp_l * float(tau_nm[4]) + 0.5 * sr_l * float(tau_nm[5])))
+
+        # Right ankle: joints 10, 11 -> motors 5, 6
+        sp_r = float(ANKLE_COUPLING_CALIBRATION_RIGHT["pitch"]["sign"])
+        sr_r = float(ANKLE_COUPLING_CALIBRATION_RIGHT["roll"]["sign"])
+        s5 = float(self.motor_sign[5])
+        s6 = float(self.motor_sign[6])
         u_r = float(qd_deg_s[10]) / sp_r
         v_r = float(qd_deg_s[11]) / sr_r
-        qd_raw[11] = float((u_r + v_r) / s11)
-        qd_raw[12] = float((v_r - u_r) / s12)
-        tau_raw[11] = float(s11 * (0.5 * sp_r * float(tau_nm[10]) + 0.5 * sr_r * float(tau_nm[11])))
-        tau_raw[12] = float(s12 * (-0.5 * sp_r * float(tau_nm[10]) + 0.5 * sr_r * float(tau_nm[11])))
+        qd_raw[5] = float((u_r + v_r) / s5)
+        qd_raw[6] = float((v_r - u_r) / s6)
+        tau_raw[5] = float(s5 * (0.5 * sp_r * float(tau_nm[10]) + 0.5 * sr_r * float(tau_nm[11])))
+        tau_raw[6] = float(s6 * (-0.5 * sp_r * float(tau_nm[10]) + 0.5 * sr_r * float(tau_nm[11])))
         return qd_raw, tau_raw
 
     def _ankle_pitch_roll_from_actions(self, a1_cmd: MotorCommand, a2_cmd: MotorCommand, *, side_name: str) -> tuple[float, float]:
@@ -1006,21 +1030,26 @@ class BipedalRobotController:
         out_nq = int(self._model_nq if nq is None else nq)
         qd_deg_s = np.zeros(max(12, out_nq), dtype=float)
 
-        qd_deg_s[0] = float(self.motor_sign[1] * float(motor_raw_vel_deg_s[1]))
-        qd_deg_s[1] = float(self.motor_sign[2] * float(motor_raw_vel_deg_s[2]))
-        qd_deg_s[2] = float(self.motor_sign[3] * float(motor_raw_vel_deg_s[3]))
-        qd_deg_s[3] = float(self.motor_sign[4] * float(motor_raw_vel_deg_s[4]))
-        qd_deg_s[6] = float(self.motor_sign[7] * float(motor_raw_vel_deg_s[7]))
-        qd_deg_s[7] = float(self.motor_sign[8] * float(motor_raw_vel_deg_s[8]))
-        qd_deg_s[8] = float(self.motor_sign[9] * float(motor_raw_vel_deg_s[9]))
-        qd_deg_s[9] = float(self.motor_sign[10] * float(motor_raw_vel_deg_s[10]))
+        # Left leg: joints 0..3 -> motors 7..10
+        qd_deg_s[0] = float(self.motor_sign[7] * float(motor_raw_vel_deg_s[7]))
+        qd_deg_s[1] = float(self.motor_sign[8] * float(motor_raw_vel_deg_s[8]))
+        qd_deg_s[2] = float(self.motor_sign[9] * float(motor_raw_vel_deg_s[9]))
+        qd_deg_s[3] = float(self.motor_sign[10] * float(motor_raw_vel_deg_s[10]))
 
-        l_a1_vel = float(self.motor_sign[5] * float(motor_raw_vel_deg_s[5]))
-        l_a2_vel = float(self.motor_sign[6] * float(motor_raw_vel_deg_s[6]))
+        # Left ankle: joints 4, 5 -> motors 11, 12
+        l_a1_vel = float(self.motor_sign[11] * float(motor_raw_vel_deg_s[11]))
+        l_a2_vel = float(self.motor_sign[12] * float(motor_raw_vel_deg_s[12]))
         qd_deg_s[4], qd_deg_s[5] = self._ankle_pitch_roll_vel_from_cal_values(l_a1_vel, l_a2_vel, side_name="left")
 
-        r_a1_vel = float(self.motor_sign[11] * float(motor_raw_vel_deg_s[11]))
-        r_a2_vel = float(self.motor_sign[12] * float(motor_raw_vel_deg_s[12]))
+        # Right leg: joints 6..9 -> motors 1..4
+        qd_deg_s[6] = float(self.motor_sign[1] * float(motor_raw_vel_deg_s[1]))
+        qd_deg_s[7] = float(self.motor_sign[2] * float(motor_raw_vel_deg_s[2]))
+        qd_deg_s[8] = float(self.motor_sign[3] * float(motor_raw_vel_deg_s[3]))
+        qd_deg_s[9] = float(self.motor_sign[4] * float(motor_raw_vel_deg_s[4]))
+
+        # Right ankle: joints 10, 11 -> motors 5, 6
+        r_a1_vel = float(self.motor_sign[5] * float(motor_raw_vel_deg_s[5]))
+        r_a2_vel = float(self.motor_sign[6] * float(motor_raw_vel_deg_s[6]))
         qd_deg_s[10], qd_deg_s[11] = self._ankle_pitch_roll_vel_from_cal_values(r_a1_vel, r_a2_vel, side_name="right")
 
         if output_radians:
@@ -1040,29 +1069,33 @@ class BipedalRobotController:
         out_nq = int(self._model_nq if nq is None else nq)
         tau_nm = np.zeros(max(12, out_nq), dtype=float)
 
-        tau_nm[0] = float(float(motor_raw_tau_nm[1]) / self.motor_sign[1])
-        tau_nm[1] = float(float(motor_raw_tau_nm[2]) / self.motor_sign[2])
-        tau_nm[2] = float(float(motor_raw_tau_nm[3]) / self.motor_sign[3])
-        tau_nm[3] = float(float(motor_raw_tau_nm[4]) / self.motor_sign[4])
-        tau_nm[6] = float(float(motor_raw_tau_nm[7]) / self.motor_sign[7])
-        tau_nm[7] = float(float(motor_raw_tau_nm[8]) / self.motor_sign[8])
-        tau_nm[8] = float(float(motor_raw_tau_nm[9]) / self.motor_sign[9])
-        tau_nm[9] = float(float(motor_raw_tau_nm[10]) / self.motor_sign[10])
+        # Left leg: joints 0..3 -> motors 7..10
+        tau_nm[0] = float(float(motor_raw_tau_nm[7]) / self.motor_sign[7])
+        tau_nm[1] = float(float(motor_raw_tau_nm[8]) / self.motor_sign[8])
+        tau_nm[2] = float(float(motor_raw_tau_nm[9]) / self.motor_sign[9])
+        tau_nm[3] = float(float(motor_raw_tau_nm[10]) / self.motor_sign[10])
 
-        t5_cal = float(motor_raw_tau_nm[5]) / self.motor_sign[5]
-        t6_cal = float(motor_raw_tau_nm[6]) / self.motor_sign[6]
+        # Left ankle: joints 4, 5 -> motors 11, 12
         t11_cal = float(motor_raw_tau_nm[11]) / self.motor_sign[11]
         t12_cal = float(motor_raw_tau_nm[12]) / self.motor_sign[12]
-
         sp_l = float(ANKLE_COUPLING_CALIBRATION_LEFT["pitch"]["sign"])
         sr_l = float(ANKLE_COUPLING_CALIBRATION_LEFT["roll"]["sign"])
-        tau_nm[4] = float((t5_cal - t6_cal) / sp_l)
-        tau_nm[5] = float((t5_cal + t6_cal) / sr_l)
+        tau_nm[4] = float((t11_cal - t12_cal) / sp_l)
+        tau_nm[5] = float((t11_cal + t12_cal) / sr_l)
 
+        # Right leg: joints 6..9 -> motors 1..4
+        tau_nm[6] = float(float(motor_raw_tau_nm[1]) / self.motor_sign[1])
+        tau_nm[7] = float(float(motor_raw_tau_nm[2]) / self.motor_sign[2])
+        tau_nm[8] = float(float(motor_raw_tau_nm[3]) / self.motor_sign[3])
+        tau_nm[9] = float(float(motor_raw_tau_nm[4]) / self.motor_sign[4])
+
+        # Right ankle: joints 10, 11 -> motors 5, 6
+        t5_cal = float(motor_raw_tau_nm[5]) / self.motor_sign[5]
+        t6_cal = float(motor_raw_tau_nm[6]) / self.motor_sign[6]
         sp_r = float(ANKLE_COUPLING_CALIBRATION_RIGHT["pitch"]["sign"])
         sr_r = float(ANKLE_COUPLING_CALIBRATION_RIGHT["roll"]["sign"])
-        tau_nm[10] = float((t11_cal - t12_cal) / sp_r)
-        tau_nm[11] = float((t11_cal + t12_cal) / sr_r)
+        tau_nm[10] = float((t5_cal - t6_cal) / sp_r)
+        tau_nm[11] = float((t5_cal + t6_cal) / sr_r)
         return tau_nm[:out_nq]
 
     def _refresh_joint_velocity_from_state_locked(self, *, stamp_s: Optional[float] = None) -> None:
@@ -1591,23 +1624,23 @@ class BipedalRobotController:
         out_nq = int(self._model_nq if nq is None else nq)
         q_deg = np.zeros(max(12, out_nq))
 
-        # Left leg
-        l_hipz = self._raw_to_cal(1, motor_raw_deg[1])
-        l_hipx = self._raw_to_cal(2, motor_raw_deg[2])
-        l_hipy = self._raw_to_cal(3, motor_raw_deg[3])
-        l_knee = self._raw_to_cal(4, motor_raw_deg[4])
-        l_a1 = self._raw_to_cal(5, motor_raw_deg[5])
-        l_a2 = self._raw_to_cal(6, motor_raw_deg[6])
+        # Left leg: joints 0..5 -> motors 7..12
+        l_hipz = self._raw_to_cal(7, motor_raw_deg[7])
+        l_hipx = self._raw_to_cal(8, motor_raw_deg[8])
+        l_hipy = self._raw_to_cal(9, motor_raw_deg[9])
+        l_knee = self._raw_to_cal(10, motor_raw_deg[10])
+        l_a1 = self._raw_to_cal(11, motor_raw_deg[11])
+        l_a2 = self._raw_to_cal(12, motor_raw_deg[12])
         l_pitch, l_roll = self._ankle_pitch_roll_from_cal_values(l_a1, l_a2, side_name="left")
         q_deg[0:6] = [l_hipz, l_hipx, l_hipy, l_knee, l_pitch, l_roll]
 
-        # Right leg
-        r_hipz = self._raw_to_cal(7, motor_raw_deg[7])
-        r_hipx = self._raw_to_cal(8, motor_raw_deg[8])
-        r_hipy = self._raw_to_cal(9, motor_raw_deg[9])
-        r_knee = self._raw_to_cal(10, motor_raw_deg[10])
-        r_a1 = self._raw_to_cal(11, motor_raw_deg[11])
-        r_a2 = self._raw_to_cal(12, motor_raw_deg[12])
+        # Right leg: joints 6..11 -> motors 1..6
+        r_hipz = self._raw_to_cal(1, motor_raw_deg[1])
+        r_hipx = self._raw_to_cal(2, motor_raw_deg[2])
+        r_hipy = self._raw_to_cal(3, motor_raw_deg[3])
+        r_knee = self._raw_to_cal(4, motor_raw_deg[4])
+        r_a1 = self._raw_to_cal(5, motor_raw_deg[5])
+        r_a2 = self._raw_to_cal(6, motor_raw_deg[6])
         r_pitch, r_roll = self._ankle_pitch_roll_from_cal_values(r_a1, r_a2, side_name="right")
         q_deg[6:12] = [r_hipz, r_hipx, r_hipy, r_knee, r_pitch, r_roll]
 
@@ -1641,21 +1674,23 @@ class BipedalRobotController:
             raise ValueError("q_joint must contain at least 12 joints")
 
         out_cal: Dict[int, float] = {
-            1: float(q_deg[0]),
-            2: float(q_deg[1]),
-            3: float(q_deg[2]),
-            4: float(q_deg[3]),
-            7: float(q_deg[6]),
-            8: float(q_deg[7]),
-            9: float(q_deg[8]),
-            10: float(q_deg[9]),
+            # Left leg: joints 0..3 -> motors 7..10
+            7: float(q_deg[0]),
+            8: float(q_deg[1]),
+            9: float(q_deg[2]),
+            10: float(q_deg[3]),
+            # Right leg: joints 6..9 -> motors 1..4
+            1: float(q_deg[6]),
+            2: float(q_deg[7]),
+            3: float(q_deg[8]),
+            4: float(q_deg[9]),
         }
         l_a1, l_a2 = self._ankle_motors_from_pitch_roll(float(q_deg[4]), float(q_deg[5]), side_name="left")
         r_a1, r_a2 = self._ankle_motors_from_pitch_roll(float(q_deg[10]), float(q_deg[11]), side_name="right")
-        out_cal[5] = float(l_a1)
-        out_cal[6] = float(l_a2)
-        out_cal[11] = float(r_a1)
-        out_cal[12] = float(r_a2)
+        out_cal[11] = float(l_a1)
+        out_cal[12] = float(l_a2)
+        out_cal[5] = float(r_a1)
+        out_cal[6] = float(r_a2)
 
         if output_space == "calibrated":
             return out_cal

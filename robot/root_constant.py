@@ -63,8 +63,8 @@ MOTORS: Dict[int, MotorConstants] = {
 MOTOR_IDS: Tuple[int, ...] = tuple(sorted(MOTORS.keys()))
 CAN0_MOTOR_IDS: Tuple[int, ...] = (1, 2, 3, 4, 5, 6)
 CAN1_MOTOR_IDS: Tuple[int, ...] = (7, 8, 9, 10, 11, 12)
-LEFT_MOTOR_IDS: Tuple[int, ...] = CAN0_MOTOR_IDS
-RIGHT_MOTOR_IDS: Tuple[int, ...] = CAN1_MOTOR_IDS
+RIGHT_MOTOR_IDS: Tuple[int, ...] = CAN0_MOTOR_IDS
+LEFT_MOTOR_IDS: Tuple[int, ...] = CAN1_MOTOR_IDS
 
 
 # -------------------------
@@ -73,21 +73,21 @@ RIGHT_MOTOR_IDS: Tuple[int, ...] = CAN1_MOTOR_IDS
 # [hipz, hipx, hipy, knee, ankle_pitch, ankle_roll]
 # -------------------------
 MODEL_JOINT_TO_MOTOR_RIGHT = {
-    "hipz": 7,
-    "hipx": 8,
-    "hipy": 9,
-    "knee": 10,
-    "ankle_pitch": (11, 12),  # coupled
-    "ankle_roll": (11, 12),   # coupled
-}
-
-MODEL_JOINT_TO_MOTOR_LEFT = {
     "hipz": 1,
     "hipx": 2,
     "hipy": 3,
     "knee": 4,
     "ankle_pitch": (5, 6),  # coupled
     "ankle_roll": (5, 6),   # coupled
+}
+
+MODEL_JOINT_TO_MOTOR_LEFT = {
+    "hipz": 7,
+    "hipx": 8,
+    "hipy": 9,
+    "knee": 10,
+    "ankle_pitch": (11, 12),  # coupled
+    "ankle_roll": (11, 12),   # coupled
 }
 
 
@@ -97,17 +97,17 @@ MODEL_JOINT_TO_MOTOR_LEFT = {
 # (for direct joints only)
 # -------------------------
 DIRECT_JOINT_CALIBRATION_RIGHT = {
-    "hipz": {"motor_id": 7, "sign": +1.0, "offset_deg": -132.68},
-    "hipx": {"motor_id": 8, "sign": +1.0, "offset_deg": -19.394},
-    "hipy": {"motor_id": 9, "sign": +1.0, "offset_deg": -88.096},
-    "knee": {"motor_id": 10, "sign": +1.0, "offset_deg": 57.352},
+    "hipz": {"motor_id": 1, "sign": +1.0, "offset_deg": 0.0},
+    "hipx": {"motor_id": 2, "sign": +1.0, "offset_deg": 0.0},
+    "hipy": {"motor_id": 3, "sign": +1.0, "offset_deg": 0.0},
+    "knee": {"motor_id": 4, "sign": -1.0, "offset_deg": 0.0},
 }
 
 DIRECT_JOINT_CALIBRATION_LEFT = {
-    "hipz": {"motor_id": 1, "sign": +1.0, "offset_deg": 132.68},
-    "hipx": {"motor_id": 2, "sign": +1.0, "offset_deg": 19.394},
-    "hipy": {"motor_id": 3, "sign": +1.0, "offset_deg": 88.096},
-    "knee": {"motor_id": 4, "sign": +1.0, "offset_deg": 57.352},
+    "hipz": {"motor_id": 7, "sign": +1.0, "offset_deg": 0.0},
+    "hipx": {"motor_id": 8, "sign": +1.0, "offset_deg": 0.0},
+    "hipy": {"motor_id": 9, "sign": -1.0, "offset_deg": 0.0},
+    "knee": {"motor_id": 10, "sign": +1.0, "offset_deg": 0.0},
 }
 
 
@@ -115,16 +115,16 @@ DIRECT_JOINT_CALIBRATION_LEFT = {
 # ankle_pitch = sign_pitch * ((m5 - m6) / 2) + offset_pitch
 # ankle_roll  = sign_roll  * ((m5 + m6) / 2) + offset_roll
 # This matches current code in robot.py:
-# q[4] = -deg2rad((m5 - m6)/2), q[5] = +deg2rad((m5 + m6)/2)
+# q[4] = -deg2rad((m11 - m12)/2), q[5] = +deg2rad((m11 + m12)/2)
 ANKLE_COUPLING_CALIBRATION_RIGHT = {
-    "motors": (11, 12),
-    # Right ankle is mirrored: signs are reversed vs left side.
+    "motors": (5, 6),
+    # Right ankle signs
     "pitch": {"sign": -1.0, "offset_deg": 0.0},
     "roll": {"sign": +1.0, "offset_deg": 0.0},
 }
 
 ANKLE_COUPLING_CALIBRATION_LEFT = {
-    "motors": (5, 6),
+    "motors": (11, 12),
     "pitch": {"sign": -1.0, "offset_deg": 0.0},
     "roll": {"sign": +1.0, "offset_deg": 0.0},
 }
@@ -140,12 +140,14 @@ for cfg in DIRECT_JOINT_CALIBRATION_RIGHT.values():
     MOTOR_SIGN[cfg["motor_id"]] = float(cfg["sign"])
     MOTOR_OFFSET_DEG[cfg["motor_id"]] = float(cfg["offset_deg"])
 
-# Explicit per-motor sign overrides from current calibration session.
-MOTOR_SIGN[4] = -1.0
-MOTOR_SIGN[5] = -1.0
-MOTOR_SIGN[6] = -1.0
-MOTOR_SIGN[11] = -1.0
-MOTOR_SIGN[12] = -1.0
+# Explicit per-motor sign overrides
+MOTOR_SIGN[4] = -1.0    # Right knee
+MOTOR_SIGN[5] = -1.0    # Right ankle 1
+MOTOR_SIGN[6] = -1.0    # Right ankle 2
+MOTOR_SIGN[9] = -1.0    # Left hip pitch (mirrored from right)
+MOTOR_SIGN[10] = +1.0   # Left knee
+MOTOR_SIGN[11] = -1.0   # Left ankle 1
+MOTOR_SIGN[12] = -1.0   # Left ankle 2
 
 
 # -------------------------
@@ -159,22 +161,21 @@ DEFAULT_GAINS = {
 
 # -------------------------
 # Safety limits (deg)
-# Updated from first raw limit scan notes.
-# Values flagged as "-360" were wrap-corrected before being entered here.
+# For physically zeroed joints with generous idle/standing headroom.
 # -------------------------
 JOINT_LIMITS_DEG = {
-    1: (-210., -50.),   # raw m1 minus 360
-    2: (-70.0, 70.0),    # raw m2 minus 360
-    3: (-168.065, 0),     # raw m3 minus 360
-    4: (0.978, 112.172),      # raw m4
-    5: (-89.753, 25.042),     # raw m5
-    6: (-25.14, 285.830),    # raw m6
-    7: (50.0, 210.),     # raw m7
-    8: (-70.0, 70.0),     # raw m8 minus 360
-    9: (-0.0, 162.438),     # raw m9
-    10: (-98.105, -0.693),    # raw m10 minus 360
-    11: (-25.50, 87.972),     # raw m11
-    12: (-78.191, 20.9),   # raw m12
+    1: (-60.0, 60.0),       # Right Hip Yaw (Z)
+    2: (-90.0, 90.0),       # Right Hip Roll (X)
+    3: (-115.0, 115.0),     # Right Hip Pitch (Y)
+    4: (-120.0, 120.0),     # Right Knee
+    5: (-60.0, 60.0),       # Right Ankle 1
+    6: (-60.0, 60.0),       # Right Ankle 2
+    7: (-60.0, 60.0),       # Left Hip Yaw (Z)
+    8: (-90.0, 90.0),       # Left Hip Roll (X)
+    9: (-115.0, 115.0),     # Left Hip Pitch (Y)
+    10: (-120.0, 120.0),    # Left Knee
+    11: (-60.0, 60.0),      # Left Ankle 1
+    12: (-60.0, 60.0),      # Left Ankle 2
 }
 
 COMMAND_MARGIN_DEG = 1.0

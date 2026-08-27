@@ -69,7 +69,15 @@ Reference assets used below are stored in this repo:
 - `docs/calibration_assets/zero_refs/ankle_zero2.jpg`
 - `docs/calibration_assets/zero_refs/ankle_calibration_tool.stl`
 
-### Setup
+### Automated Interactive Wizard (Recommended)
+
+You can run the interactive CLI zeroing wizard which walks through each joint step-by-step with visual guidance:
+
+```bash
+uv run python tools/interactive_zeroing.py
+```
+
+### Manual IPython Setup (Alternative)
 
 Use `uv run ipython`, then:
 
@@ -90,11 +98,11 @@ i2cdetect -y 1
 
 ### Joint-to-Motor IDs for zeroing
 
-- `hipz`: left `1`, right `7`
-- `hipx`: left `2`, right `8`
-- `hipy`: left `3`, right `9`
-- `knee`: left `4`, right `10`
-- `ankle`: left `5,6`, right `11,12`
+- `hipz`: right `1` (can0), left `7` (can1)
+- `hipx`: right `2` (can0), left `8` (can1)
+- `hipy`: right `3` (can0), left `9` (can1)
+- `knee`: right `4` (can0), left `10` (can1)
+- `ankle`: right `5,6` (can0), left `11,12` (can1)
 
 ### Reference pictures
 
@@ -112,11 +120,15 @@ i2cdetect -y 1
 
 #### hipy
 
+Position thigh straight DOWN vertically inline with torso frame (neutral standing pose, 0° pitch).
+
 | hipy zero |
 |---|
 | ![hipy zero reference](docs/calibration_assets/zero_refs/hipy_zero.jpg) |
 
 #### knee
+
+Position shin straight DOWN vertically inline with thigh (neutral standing pose, 0° knee bend).
 
 | knee zero |
 |---|
@@ -126,7 +138,7 @@ i2cdetect -y 1
 
 1. Print the ankle calibration tool STL:
    - `docs/calibration_assets/zero_refs/ankle_calibration_tool.stl`
-2. Install/use the tool as shown below to set the mechanical ankle reference before zeroing.
+2. Install/use the tool as shown below to set the mechanical ankle reference (foot flat, 90° to shin) before zeroing.
 
 | ankle zero with tool |
 |---|
@@ -134,7 +146,7 @@ i2cdetect -y 1
 
 ### Zero command sequence
 
-After placing each joint to the matching reference picture, send zero command for the corresponding motor IDs:
+Zero the robot in its **neutral standing stance** (thighs straight down, knees straight, feet flat at 90°). Send zero commands for the corresponding motor IDs:
 
 ```python
 # hipz
@@ -153,7 +165,19 @@ robot.set_zero(4); robot.set_zero(10)
 robot.set_zero(5); robot.set_zero(6)
 robot.set_zero(11); robot.set_zero(12)
 ```
-## 5. Start in Read-Only Mode
+## 5. Start in Read-Only Mode & Motor ID Verification
+
+### Fast CLI Bus Scanner (Recommended)
+
+Run the motor ID scanner to verify all 12 motors are responding on `can0` and `can1`:
+
+```bash
+python tools/scan_motors.py
+# or via uv:
+uv run python tools/scan_motors.py
+```
+
+### Detailed IPython Inspection
 
 Use `uv run ipython`, then:
 
@@ -195,6 +219,14 @@ If mismatch appears:
 - then suspect sign/offset calibration tables.
 
 ## 7. Control-Mode Micro-Motion Test
+
+### Interactive CLI Verifier (Recommended)
+
+```bash
+uv run python tools/joint_nudge_tester.py
+```
+
+### Manual Verification in IPython
 
 Only after read-only checks pass:
 
@@ -267,6 +299,20 @@ Do not reduce safety margins to force motion.
 
 ## 10. IMU Validation
 
+### Diagnostic & Zero-Bias Tool (Recommended)
+
+Run the IMU calibration tool to sample static biases and verify coordinate frame roll/pitch conventions:
+
+```bash
+# For BNO055:
+uv run python tools/imu_calibration_tool.py --sensor bno055
+
+# For BNO085:
+uv run python tools/imu_calibration_tool.py --sensor bno085
+```
+
+### IPython Verification
+
 From the read-only snapshot:
 
 ```python
@@ -286,6 +332,12 @@ Recommended:
 - save terminal session,
 - save key snapshots from `get_combined_state_snapshot()`,
 - keep CSV logs from controller/agent runs when testing with policy.
+
+Visualize controller CSV logs and generate an interactive HTML report:
+
+```bash
+uv run python tools/log_visualizer.py --log-file bipedal_state_log.csv
+```
 
 For structured identification datasets, use:
 

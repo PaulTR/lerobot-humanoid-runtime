@@ -37,6 +37,12 @@ Bill of materials / hardware repository:
 - `imu/IMU_integration.py`: IMU backends (`bno055`, `bno085`, `jy901`, `mock`).
 - `apps/gamepad_controller.py`: gamepad command source.
 - `lerobot_humanoid_lerobot_integration/`: LeRobot robot implementation for this humanoid.
+- `tools/scan_motors.py`: CAN bus motor scanner and ID verifier for `can0` and `can1`.
+- `tools/interactive_zeroing.py`: interactive manual joint zeroing wizard.
+- `tools/imu_calibration_tool.py`: IMU diagnostic & zero-bias calibration tool.
+- `tools/joint_nudge_tester.py`: single-joint nudge and motion direction verifier.
+- `tools/log_visualizer.py`: controller CSV log visualizer & HTML diagnostic generator.
+- `tools/data_acquisition.py`: dataset generation for identification workflows.
 - `ipython_helper.py`: practical copy/paste snippets for sim/real operation.
 
 ## Setup
